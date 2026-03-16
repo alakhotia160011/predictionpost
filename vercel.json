@@ -1,0 +1,5 @@
+{
+  "buildCommand": "cd kalshi-dashboard && npm install && npm run build",
+  "outputDirectory": "kalshi-dashboard/dist",
+  "framework": "vite"
+}
