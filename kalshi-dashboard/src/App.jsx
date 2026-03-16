@@ -989,15 +989,25 @@ export default function KalshiNewspaper() {
               fontSize: 11,
               letterSpacing: '0.05em',
               textTransform: 'uppercase',
-              color: loading ? '#999' : '#1a1a1a',
-              background: 'none',
-              border: '1px solid currentColor',
-              padding: '5px 10px',
+              color: loading ? '#999' : '#fff',
+              background: loading ? '#ccc' : '#1a1a1a',
+              border: 'none',
+              padding: '6px 14px',
               borderRadius: 3,
               cursor: loading ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              transition: 'background-color 0.2s',
             }}
+            onMouseOver={e => { if (!loading) e.currentTarget.style.backgroundColor = '#333'; }}
+            onMouseOut={e => { if (!loading) e.currentTarget.style.backgroundColor = '#1a1a1a'; }}
           >
-            {loading ? '...' : '↻'}
+            <span style={{
+              display: 'inline-block',
+              animation: loading ? 'spin 1s linear infinite' : 'none',
+            }}>↻</span>
+            {loading ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
       </nav>
