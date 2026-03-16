@@ -1,158 +1,71 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
-// Kalshi API base URL (no auth needed for market data)
+// Kalshi API base URL (public, no auth needed)
 const API_BASE = 'https://api.elections.kalshi.com/trade-api/v2';
 
-// Series/tickers we want to display with their categories and URLs
+// Series to fetch with their categories — only series with active markets as of March 2026
 const MARKET_CONFIG = [
   // Economics
-  { series: 'KXFEDCHAIRNOM', category: 'economics', url: 'https://kalshi.com/markets/kxfedchairnom/fed-chair-nominee' },
-  { series: 'KXFED', category: 'economics', url: 'https://kalshi.com/markets/kxfed/fed-funds-rate' },
-  { series: 'KXGDP', category: 'economics', url: 'https://kalshi.com/markets/kxgdp/gdp-growth' },
-  { series: 'KXCPI', category: 'economics', url: 'https://kalshi.com/markets/kxcpi/cpi-inflation' },
-  // Politics
-  { series: 'KXSENATE', category: 'politics', url: 'https://kalshi.com/markets/kxsenate/senate-control' },
-  { series: 'KXHOUSE', category: 'politics', url: 'https://kalshi.com/markets/kxhouse/house-control' },
+  { series: 'KXGDP', category: 'economics', url: 'https://kalshi.com/markets/kxgdp' },
+  { series: 'KXCPI', category: 'economics', url: 'https://kalshi.com/markets/kxcpi' },
+  { series: 'KXFED', category: 'economics', url: 'https://kalshi.com/markets/kxfed' },
+  { series: 'KXPCECORE', category: 'economics', url: 'https://kalshi.com/markets/kxpcecore' },
+  { series: 'KXRECSSNBER', category: 'economics', url: 'https://kalshi.com/markets/kxrecssnber' },
+  { series: 'KXINX', category: 'economics', url: 'https://kalshi.com/markets/kxinx' },
   // Sports
-  { series: 'KXSB', category: 'sports', url: 'https://kalshi.com/markets/kxsb/super-bowl' },
-  { series: 'KXNFL', category: 'sports', url: 'https://kalshi.com/markets/kxnfl/nfl' },
+  { series: 'KXNBA', category: 'sports', url: 'https://kalshi.com/markets/kxnba' },
+  { series: 'KXNHL', category: 'sports', url: 'https://kalshi.com/markets/kxnhl' },
+  { series: 'KXMLB', category: 'sports', url: 'https://kalshi.com/markets/kxmlb' },
   // Tech/Crypto
-  { series: 'KXBTC', category: 'tech', url: 'https://kalshi.com/markets/kxbtc/bitcoin-price' },
-  { series: 'KXETH', category: 'tech', url: 'https://kalshi.com/markets/kxeth/ethereum-price' },
-  { series: 'KXTSLA', category: 'tech', url: 'https://kalshi.com/markets/kxtsla/tesla-price' },
-  { series: 'KXNVDA', category: 'tech', url: 'https://kalshi.com/markets/kxnvda/nvidia-price' },
-  // Culture
-  { series: 'KXOSCARS', category: 'culture', url: 'https://kalshi.com/markets/kxoscars/oscars' },
-  { series: 'KXGRAMMYS', category: 'culture', url: 'https://kalshi.com/markets/kxgrammys/grammys' },
+  { series: 'KXBTC', category: 'tech', url: 'https://kalshi.com/markets/kxbtc' },
+  { series: 'KXETH', category: 'tech', url: 'https://kalshi.com/markets/kxeth' },
   // Weather
-  { series: 'KXHIGHNY', category: 'weather', url: 'https://kalshi.com/markets/kxhighny/nyc-temperature' },
+  { series: 'KXHIGHNY', category: 'weather', url: 'https://kalshi.com/markets/kxhighny' },
 ];
 
-// Fallback data - comprehensive market list (15+ per category)
-// Prices based on web search results from January 25, 2026
-// URLs use simple format: kalshi.com/markets/{series_ticker} - always works
+// Fallback data — current as of March 15, 2026, from Kalshi public API
 const FALLBACK_MARKETS = [
-  // ==================== ECONOMICS (18 markets) ====================
-  { ticker: 'KXFEDCHAIRNOM-RIEDER', title: 'Rick Rieder nominated as Fed Chair?', yes_price: 0.60, volume: 55000000, volume_24h: 2100000, category: 'economics', url: 'https://kalshi.com/markets/kxfedchairnom', commentary: 'BlackRock CIO surged after Trump praise at Davos.', question: 'Will Wall Street get their pick?' },
-  { ticker: 'KXFEDCHAIRNOM-WARSH', title: 'Kevin Warsh nominated as Fed Chair?', yes_price: 0.31, volume: 55000000, volume_24h: 1800000, category: 'economics', url: 'https://kalshi.com/markets/kxfedchairnom', commentary: 'Former frontrunner fading fast. Down 14 points this week.', question: 'Did Bessent back the wrong horse?' },
-  { ticker: 'KXFEDCHAIRNOM-WALLER', title: 'Chris Waller nominated as Fed Chair?', yes_price: 0.05, volume: 55000000, volume_24h: 450000, category: 'economics', url: 'https://kalshi.com/markets/kxfedchairnom', commentary: 'Current Fed Governor. Long shot but gaining attention.', question: 'Inside candidate or no chance?' },
-  { ticker: 'KXFEDCHAIRNOM-HASSETT', title: 'Kevin Hassett nominated as Fed Chair?', yes_price: 0.03, volume: 55000000, volume_24h: 230000, category: 'economics', url: 'https://kalshi.com/markets/kxfedchairnom', commentary: 'NEC Director was favorite in December. Now distant third.', question: 'Political loyalty not enough?' },
-  { ticker: 'KXFEDDECISION-JAN', title: 'Fed holds rate at January meeting?', yes_price: 0.97, volume: 12000000, volume_24h: 450000, category: 'economics', url: 'https://kalshi.com/markets/kxfeddecision', commentary: 'FOMC meets this week. Rate hold is near certainty.', question: 'Any surprise dissents?' },
-  { ticker: 'KXFEDDECISION-MAR', title: 'Fed cuts rate by March?', yes_price: 0.13, volume: 8500000, volume_24h: 340000, category: 'economics', url: 'https://kalshi.com/markets/kxfeddecision', commentary: 'Inflation still sticky. March cut unlikely.', question: 'Has the pivot been priced out?' },
-  { ticker: 'KXGDP-Q4', title: 'Q4 2025 GDP above 2.5%?', yes_price: 0.58, volume: 2300000, volume_24h: 180000, category: 'economics', url: 'https://kalshi.com/markets/kxgdp', commentary: 'Advance estimate Thursday. Consensus around 2.6%.', question: 'Consumer still carrying the load?' },
-  { ticker: 'KXGDPYEAR-2026', title: '2026 annual GDP above 2%?', yes_price: 0.72, volume: 1800000, volume_24h: 120000, category: 'economics', url: 'https://kalshi.com/markets/kxgdpyear', commentary: 'Full year outlook remains positive.', question: 'Tariffs the wild card?' },
-  { ticker: 'KXCPI-JAN', title: 'January CPI above 2.8%?', yes_price: 0.45, volume: 3400000, volume_24h: 230000, category: 'economics', url: 'https://kalshi.com/markets/kxcpi', commentary: 'December came in at 2.9%. Disinflation stalling.', question: 'Is 2% target achievable in 2026?' },
-  { ticker: 'KXPCECORE-JAN', title: 'Core PCE above 2.7% in January?', yes_price: 0.52, volume: 1200000, volume_24h: 89000, category: 'economics', url: 'https://kalshi.com/markets/kxpcecore', commentary: "Fed's preferred inflation gauge. Still above target.", question: 'Services inflation the problem?' },
-  { ticker: 'KXRECSSNBER-2026', title: 'US recession in 2026?', yes_price: 0.25, volume: 8900000, volume_24h: 340000, category: 'economics', url: 'https://kalshi.com/markets/kxrecssnber', commentary: 'All-time low. Strong GDP killed recession fears.', question: 'Soft landing achieved?' },
-  { ticker: 'KXUNEMPLOY-JAN', title: 'Unemployment above 4.5% in January?', yes_price: 0.18, volume: 1100000, volume_24h: 67000, category: 'economics', url: 'https://kalshi.com/markets/kxunemploy', commentary: 'Labor market remains tight at 4.2%.', question: 'Cooling or resilient?' },
-  { ticker: 'KXGOVSHUT-MAR', title: 'Government shutdown by March 31?', yes_price: 0.28, volume: 3400000, volume_24h: 230000, category: 'economics', url: 'https://kalshi.com/markets/kxgovshut', commentary: 'Debt ceiling fight brewing. CR expires March 14.', question: 'DOGE cuts complicate things?' },
-  { ticker: 'KXCONGRESSTARIFF-CHINA', title: 'New China tariffs by Feb 1?', yes_price: 0.67, volume: 2300000, volume_24h: 340000, category: 'economics', url: 'https://kalshi.com/markets/kxcongresstariff', commentary: 'Trump threatened 10% on day one. Delayed but coming.', question: 'Retaliation risk?' },
-  { ticker: 'KXCONGRESSTARIFF-CANADA', title: 'Canada tariffs above 10% by March?', yes_price: 0.42, volume: 1800000, volume_24h: 180000, category: 'economics', url: 'https://kalshi.com/markets/kxcongresstariff', commentary: '25% threat may be negotiating tactic.', question: 'USMCA renegotiation?' },
-  { ticker: 'KXSP500-6000', title: 'S&P 500 above 6000 end of January?', yes_price: 0.68, volume: 4500000, volume_24h: 560000, category: 'economics', url: 'https://kalshi.com/markets/kxsp500', commentary: 'Currently around 6050. Bulls in control.', question: 'Earnings season the test?' },
-  { ticker: 'KXSP500-YEAR', title: 'S&P 500 up for 2026?', yes_price: 0.71, volume: 3400000, volume_24h: 230000, category: 'economics', url: 'https://kalshi.com/markets/kxsp500', commentary: 'Third year of bull market. Valuations stretched.', question: 'Can AI rally continue?' },
-  { ticker: 'KXLEAVEPOWELL-MAY', title: 'Powell out as Fed Chair before May?', yes_price: 0.08, volume: 2100000, volume_24h: 120000, category: 'economics', url: 'https://kalshi.com/markets/kxleavepowell', commentary: 'Term expires May 15. Unlikely to be pushed out early.', question: 'DOJ investigation a factor?' },
+  // ==================== ECONOMICS ====================
+  { ticker: 'KXGDP-26APR30-T2.0', title: 'Q1 2026 GDP growth above 2.0%?', yes_price: 0.66, volume: 53573, volume_24h: 8200, category: 'economics', url: 'https://kalshi.com/markets/kxgdp', commentary: 'Market implies 66% chance GDP exceeds 2%. Tight 1c spreads show healthy liquidity.', question: 'Tariff drag or consumer resilience?' },
+  { ticker: 'KXGDP-26APR30-T2.5', title: 'Q1 2026 GDP growth above 2.5%?', yes_price: 0.56, volume: 37635, volume_24h: 5400, category: 'economics', url: 'https://kalshi.com/markets/kxgdp', commentary: '56% implied probability. Consensus clustering around 2.3-2.7%.', question: 'Can the expansion continue?' },
+  { ticker: 'KXGDP-26APR30-T1.5', title: 'Q1 2026 GDP growth above 1.5%?', yes_price: 0.78, volume: 51598, volume_24h: 7100, category: 'economics', url: 'https://kalshi.com/markets/kxgdp', commentary: 'Near certainty the economy avoids sub-1.5% growth.', question: 'Soft landing confirmed?' },
+  { ticker: 'KXGDP-26APR30-T3.0', title: 'Q1 2026 GDP growth above 3.0%?', yes_price: 0.42, volume: 28000, volume_24h: 3800, category: 'economics', url: 'https://kalshi.com/markets/kxgdp', commentary: 'Hot GDP would complicate Fed rate cut plans.', question: 'Too hot for comfort?' },
+  { ticker: 'KXCPI-26MAR-T0.6', title: 'March CPI monthly change above 0.6%?', yes_price: 0.75, volume: 38214, volume_24h: 6300, category: 'economics', url: 'https://kalshi.com/markets/kxcpi', commentary: '75% probability CPI exceeds 0.6% MoM. Inflation proving sticky.', question: 'Is 2% target slipping away?' },
+  { ticker: 'KXCPI-26MAR-T0.7', title: 'March CPI monthly change above 0.7%?', yes_price: 0.52, volume: 33963, volume_24h: 5200, category: 'economics', url: 'https://kalshi.com/markets/kxcpi', commentary: 'Coin flip on whether CPI breaches 0.7%. Shelter costs key.', question: 'Core vs headline divergence?' },
+  { ticker: 'KXCPI-26MAR-T0.8', title: 'March CPI monthly change above 0.8%?', yes_price: 0.37, volume: 11013, volume_24h: 1800, category: 'economics', url: 'https://kalshi.com/markets/kxcpi', commentary: 'Tail risk of hot inflation print. Energy prices volatile.', question: 'Stagflation fears returning?' },
+  { ticker: 'KXRECSSNBER-26', title: 'Will there be a US recession in 2026?', yes_price: 0.33, volume: 682318, volume_24h: 12400, category: 'economics', url: 'https://kalshi.com/markets/kxrecssnber', commentary: '33% recession probability — up from 25% in January. Trade war fears rising.', question: 'Are tariffs tipping the balance?' },
+  { ticker: 'KXFED-27APR-T3.25', title: 'Fed funds rate above 3.25% by April 2027?', yes_price: 0.50, volume: 4352, volume_24h: 580, category: 'economics', url: 'https://kalshi.com/markets/kxfed', commentary: 'Wide bid-ask spreads on far-dated Fed markets. 50/50 on rate above 3.25%.', question: 'How many cuts this cycle?' },
+  { ticker: 'KXFED-27APR-T3.50', title: 'Fed funds rate above 3.50% by April 2027?', yes_price: 0.50, volume: 1733, volume_24h: 320, category: 'economics', url: 'https://kalshi.com/markets/kxfed', commentary: 'Markets still uncertain on terminal rate.', question: 'Higher for even longer?' },
 
-  // ==================== POLITICS (16 markets) ====================
-  { ticker: 'KXHOUSE-DEM', title: 'Democrats win House in 2026?', yes_price: 0.72, volume: 8900000, volume_24h: 340000, category: 'politics', url: 'https://kalshi.com/markets/kxhouse', commentary: 'Historical headwinds favor Dems. Slim GOP majority.', question: 'Can Republicans defy midterm gravity?' },
-  { ticker: 'KXSENATE-DEM', title: 'Democrats win Senate in 2026?', yes_price: 0.38, volume: 5600000, volume_24h: 230000, category: 'politics', url: 'https://kalshi.com/markets/kxsenate', commentary: 'Tough map for Dems. Need to flip seats.', question: 'Texas or Florida in play?' },
-  { ticker: 'KXAPRPOTUS-47', title: 'Trump approval above 47% Feb 1?', yes_price: 0.44, volume: 2300000, volume_24h: 120000, category: 'politics', url: 'https://kalshi.com/markets/kxaprpotus', commentary: 'Davos trip got mixed reviews. Hovering around 46%.', question: 'Does the base stay energized?' },
-  { ticker: 'KXTRUMPAPPROVALYEAR-50', title: 'Trump approval above 50% in 2026?', yes_price: 0.28, volume: 1800000, volume_24h: 89000, category: 'politics', url: 'https://kalshi.com/markets/kxtrumpapprovalyear', commentary: 'Never hit 50% in first term.', question: 'Can tariffs boost approval?' },
-  { ticker: 'KXNYCMAYOR-MAMDANI', title: 'Mamdani approval above 55% March 1?', yes_price: 0.62, volume: 1200000, volume_24h: 67000, category: 'politics', url: 'https://kalshi.com/markets/kxnycmayor', commentary: 'New NYC mayor riding high. Honeymoon period.', question: 'Can socialist deliver?' },
-  { ticker: 'KXNJGOV', title: 'Sherrill wins NJ Governor?', yes_price: 0.86, volume: 11800000, volume_24h: 450000, category: 'politics', url: 'https://kalshi.com/markets/kxnjgov', commentary: 'Already won Nov 4. Market closed. Dem sweep.', question: 'Blue wall intact.' },
-  { ticker: 'KXCABINET-HEGSETH', title: 'Hegseth confirmed as Defense Sec?', yes_price: 0.78, volume: 3400000, volume_24h: 180000, category: 'politics', url: 'https://kalshi.com/markets/kxcabinet', commentary: 'Controversial pick survived committee vote.', question: 'Senate floor drama?' },
-  { ticker: 'KXCABINET-GABBARD', title: 'Gabbard confirmed as DNI?', yes_price: 0.72, volume: 2800000, volume_24h: 120000, category: 'politics', url: 'https://kalshi.com/markets/kxcabinet', commentary: 'Intelligence community skeptical.', question: 'Will Collins vote yes?' },
-  { ticker: 'KXCABINET-KENNEDY', title: 'RFK Jr confirmed as HHS Sec?', yes_price: 0.68, volume: 3100000, volume_24h: 150000, category: 'politics', url: 'https://kalshi.com/markets/kxcabinet', commentary: 'Vaccine skeptic facing tough questions.', question: 'How many GOP defections?' },
-  { ticker: 'KXPARDON-J6', title: 'Trump pardons J6 defendants?', yes_price: 0.92, volume: 1800000, volume_24h: 89000, category: 'politics', url: 'https://kalshi.com/markets/kxpardon', commentary: 'Already issued day one. Mass pardons expected.', question: 'All or just some?' },
-  { ticker: 'KXEXECORDER-DEI', title: 'Executive order ending federal DEI?', yes_price: 0.95, volume: 890000, volume_24h: 45000, category: 'politics', url: 'https://kalshi.com/markets/kxexecorder', commentary: 'Already signed. Federal DEI programs ended.', question: 'Private sector next?' },
-  { ticker: 'KXEXECORDER-BIRTHRIGHT', title: 'Birthright citizenship EO survives court?', yes_price: 0.22, volume: 2300000, volume_24h: 180000, category: 'politics', url: 'https://kalshi.com/markets/kxexecorder', commentary: 'Multiple judges blocked. 14th Amendment fight.', question: 'Supreme Court bound?' },
-  { ticker: 'KXGREENLAND', title: 'US acquires part of Greenland in 2026?', yes_price: 0.08, volume: 1100000, volume_24h: 67000, category: 'politics', url: 'https://kalshi.com/markets/kxgreenland', commentary: 'Trump rhetoric cooled. Denmark not budging.', question: 'Was it ever serious?' },
-  { ticker: 'KXPANAMA', title: 'US takes control of Panama Canal?', yes_price: 0.04, volume: 890000, volume_24h: 34000, category: 'politics', url: 'https://kalshi.com/markets/kxpanama', commentary: 'Saber rattling. No realistic path.', question: 'Military action unthinkable?' },
-  { ticker: 'KXGOVTCUTS-100B', title: 'DOGE cuts $100B+ in 2026?', yes_price: 0.35, volume: 2800000, volume_24h: 180000, category: 'politics', url: 'https://kalshi.com/markets/kxgovtcuts', commentary: 'Musk promised trillions. Reality setting in.', question: 'Mandatory spending untouchable?' },
-  { ticker: 'KXAMEND22-MUSK', title: 'Musk runs for VP in 2028?', yes_price: 0.12, volume: 1200000, volume_24h: 67000, category: 'politics', url: 'https://kalshi.com/markets/kxamend22', commentary: 'Born in South Africa. Constitution says no.', question: 'Amendment push?' },
+  // ==================== SPORTS ====================
+  { ticker: 'KXNBA-26-OKC', title: 'Thunder win 2026 NBA Finals?', yes_price: 0.38, volume: 2947010, volume_24h: 185000, category: 'sports', url: 'https://kalshi.com/markets/kxnba', commentary: 'Clear favorite at 38%. SGA leading MVP race. Dominant regular season.', question: 'Can anyone stop OKC?' },
+  { ticker: 'KXNBA-26-SAS', title: 'Spurs win 2026 NBA Finals?', yes_price: 0.16, volume: 6067636, volume_24h: 320000, category: 'sports', url: 'https://kalshi.com/markets/kxnba', commentary: 'Highest volume on Kalshi — 6M+ contracts. Wembanyama effect is real.', question: 'Victor making San Antonio relevant again?' },
+  { ticker: 'KXNBA-26-BOS', title: 'Celtics win 2026 NBA Finals?', yes_price: 0.14, volume: 2990997, volume_24h: 145000, category: 'sports', url: 'https://kalshi.com/markets/kxnba', commentary: 'Defending champs fading in odds. Tatum needs help.', question: 'Dynasty or one-hit wonder?' },
+  { ticker: 'KXNBA-26-LAL', title: 'Lakers win 2026 NBA Finals?', yes_price: 0.02, volume: 2938383, volume_24h: 98000, category: 'sports', url: 'https://kalshi.com/markets/kxnba', commentary: 'Long shot at 2%. Massive volume from LA faithful.', question: 'LeBron\'s last dance?' },
+  { ticker: 'KXNBA-26-DET', title: 'Pistons win 2026 NBA Finals?', yes_price: 0.04, volume: 2586880, volume_24h: 78000, category: 'sports', url: 'https://kalshi.com/markets/kxnba', commentary: 'Cade Cunningham breakout season generating buzz.', question: 'Motown miracle or mirage?' },
+  { ticker: 'KXNHL-26-COL', title: 'Avalanche win 2026 Stanley Cup?', yes_price: 0.21, volume: 1430059, volume_24h: 62000, category: 'sports', url: 'https://kalshi.com/markets/kxnhl', commentary: 'Cup favorites at 21%. MacKinnon on a tear.', question: 'Back to championship form?' },
+  { ticker: 'KXNHL-26-MIN', title: 'Wild win 2026 Stanley Cup?', yes_price: 0.06, volume: 1171703, volume_24h: 45000, category: 'sports', url: 'https://kalshi.com/markets/kxnhl', commentary: 'Dark horse at 6%. Surprise contender this season.', question: 'State of Hockey uprising?' },
+  { ticker: 'KXNHL-26-BUF', title: 'Sabres win 2026 Stanley Cup?', yes_price: 0.07, volume: 941186, volume_24h: 38000, category: 'sports', url: 'https://kalshi.com/markets/kxnhl', commentary: 'Buffalo finally in the playoff picture after years of futility.', question: 'End of the drought?' },
+  { ticker: 'KXMLB-26-LAD', title: 'Dodgers win 2026 World Series?', yes_price: 0.30, volume: 462274, volume_24h: 24000, category: 'sports', url: 'https://kalshi.com/markets/kxmlb', commentary: 'Favorites at 30%. Ohtani/Betts core intact.', question: 'Three-peat within reach?' },
+  { ticker: 'KXMLB-26-SEA', title: 'Mariners win 2026 World Series?', yes_price: 0.10, volume: 571605, volume_24h: 28000, category: 'sports', url: 'https://kalshi.com/markets/kxmlb', commentary: 'Highest MLB volume despite lower odds. Seattle believes.', question: 'Breaking the longest drought in baseball?' },
 
-  // ==================== SPORTS (18 markets) ====================
-  { ticker: 'KXSB-SEA', title: 'Seahawks win Super Bowl LX?', yes_price: 0.38, volume: 128000000, volume_24h: 4500000, category: 'sports', url: 'https://kalshi.com/markets/kxsb', commentary: 'NFC favorites after crushing 49ers. 14-3 record.', question: 'Is this Seattle\'s year?' },
-  { ticker: 'KXSB-LAR', title: 'Rams win Super Bowl LX?', yes_price: 0.26, volume: 128000000, volume_24h: 3200000, category: 'sports', url: 'https://kalshi.com/markets/kxsb', commentary: 'Stafford ice cold in clutch. Two game-winning drives.', question: 'MVP gets the ring?' },
-  { ticker: 'KXSB-NE', title: 'Patriots win Super Bowl LX?', yes_price: 0.24, volume: 128000000, volume_24h: 2800000, category: 'sports', url: 'https://kalshi.com/markets/kxsb', commentary: 'Drake Maye arriving at the right time.', question: 'Dynasty 2.0 begins?' },
-  { ticker: 'KXSB-DEN', title: 'Broncos win Super Bowl LX?', yes_price: 0.12, volume: 128000000, volume_24h: 890000, category: 'sports', url: 'https://kalshi.com/markets/kxsb', commentary: 'Beat Bills but lost Bo Nix to injury.', question: 'Can Stidham deliver?' },
-  { ticker: 'KXNFC-SEA', title: 'Seahawks win NFC Championship?', yes_price: 0.58, volume: 45000000, volume_24h: 2300000, category: 'sports', url: 'https://kalshi.com/markets/kxnfc', commentary: 'Home field advantage. Geno Smith playing MVP ball.', question: 'Rams repeat 2022?' },
-  { ticker: 'KXAFC-NE', title: 'Patriots win AFC Championship?', yes_price: 0.52, volume: 45000000, volume_24h: 1800000, category: 'sports', url: 'https://kalshi.com/markets/kxafc', commentary: 'Defense dominant. Maye getting better each week.', question: 'Broncos defense tougher test?' },
-  { ticker: 'KXSBMVP-STAFFORD', title: 'Stafford wins Super Bowl MVP?', yes_price: 0.18, volume: 8900000, volume_24h: 560000, category: 'sports', url: 'https://kalshi.com/markets/kxsbmvp', commentary: 'Would cap historic season. 41 TDs, 9 INTs.', question: 'Regular season MVP too?' },
-  { ticker: 'KXSBMVP-MAYE', title: 'Drake Maye wins Super Bowl MVP?', yes_price: 0.16, volume: 8900000, volume_24h: 450000, category: 'sports', url: 'https://kalshi.com/markets/kxsbmvp', commentary: 'Rookie sensation. 34-1 odds to start season.', question: 'Best rookie season ever?' },
-  { ticker: 'KXSBMVP-SMITH', title: 'Geno Smith wins Super Bowl MVP?', yes_price: 0.22, volume: 8900000, volume_24h: 670000, category: 'sports', url: 'https://kalshi.com/markets/kxsbmvp', commentary: 'Redemption arc complete if Seahawks win.', question: 'Finally elite or system QB?' },
-  { ticker: 'KXSWIFT-SB', title: 'Taylor Swift attends Super Bowl?', yes_price: 0.72, volume: 2300000, volume_24h: 340000, category: 'sports', url: 'https://kalshi.com/markets/kxswift', commentary: 'Eras Tour break. Travis Kelce not in SB this year.', question: 'Will she root for Pats?' },
-  { ticker: 'KXNBA-BOS', title: 'Celtics win NBA Championship?', yes_price: 0.28, volume: 34000000, volume_24h: 1200000, category: 'sports', url: 'https://kalshi.com/markets/kxnba', commentary: 'Defending champs. Tatum playing at MVP level.', question: 'Back-to-back?' },
-  { ticker: 'KXNBA-OKC', title: 'Thunder win NBA Championship?', yes_price: 0.24, volume: 34000000, volume_24h: 980000, category: 'sports', url: 'https://kalshi.com/markets/kxnba', commentary: 'Best record in NBA. SGA is special.', question: 'Too young for playoffs?' },
-  { ticker: 'KXNBA-CLE', title: 'Cavaliers win NBA Championship?', yes_price: 0.18, volume: 34000000, volume_24h: 670000, category: 'sports', url: 'https://kalshi.com/markets/kxnba', commentary: 'Mitchell balling. Best start in franchise history.', question: 'For real or fool\'s gold?' },
-  { ticker: 'KXMARCH-DUKE', title: 'Duke wins March Madness?', yes_price: 0.15, volume: 12000000, volume_24h: 340000, category: 'sports', url: 'https://kalshi.com/markets/kxmarch', commentary: 'Cooper Flagg is generational. #1 overall pick lock.', question: 'One and done to champion?' },
-  { ticker: 'KXMARCH-AUBURN', title: 'Auburn wins March Madness?', yes_price: 0.12, volume: 12000000, volume_24h: 230000, category: 'sports', url: 'https://kalshi.com/markets/kxmarch', commentary: '#1 ranking. Pearl building something special.', question: 'Can they avoid upset?' },
-  { ticker: 'KXMLB-LAD', title: 'Dodgers win 2026 World Series?', yes_price: 0.22, volume: 8900000, volume_24h: 180000, category: 'sports', url: 'https://kalshi.com/markets/kxmlb', commentary: 'Defending champs. Ohtani/Betts/Freeman core.', question: 'Three-peat possible?' },
-  { ticker: 'KXGOLF-SCHEFFLER', title: 'Scheffler wins 2026 Masters?', yes_price: 0.28, volume: 3400000, volume_24h: 120000, category: 'sports', url: 'https://kalshi.com/markets/kxgolf', commentary: 'World #1. Dominated 2025 season.', question: 'Third green jacket?' },
-  { ticker: 'KXUFC-JJ', title: 'Jon Jones defends title in 2026?', yes_price: 0.45, volume: 2300000, volume_24h: 89000, category: 'sports', url: 'https://kalshi.com/markets/kxufc', commentary: 'GOAT debate. Aspinall fight the one fans want.', question: 'Will he actually fight?' },
+  // ==================== TECH ====================
+  { ticker: 'KXBTC-26MAR1617-B73000', title: 'Bitcoin above $73,000 on March 16?', yes_price: 0.13, volume: 3456, volume_24h: 890, category: 'tech', url: 'https://kalshi.com/markets/kxbtc', commentary: 'Daily price bracket. BTC trading around $73K. Tight range.', question: 'Breakout or breakdown?' },
+  { ticker: 'KXBTC-26MAR1617-T62250', title: 'Bitcoin below $62,250 on March 16?', yes_price: 0.01, volume: 836, volume_24h: 210, category: 'tech', url: 'https://kalshi.com/markets/kxbtc', commentary: 'Deep out-of-the-money. Would require a major crash.', question: 'Black swan hedge?' },
+  { ticker: 'KXETH-26MAR1617-T2860', title: 'Ethereum price range on March 16?', yes_price: 0.01, volume: 55, volume_24h: 12, category: 'tech', url: 'https://kalshi.com/markets/kxeth', commentary: 'ETH markets very thin. Low interest in daily brackets.', question: 'Where did the ETH traders go?' },
 
-  // ==================== TECH (17 markets) ====================
-  { ticker: 'KXBTCMAXY-100K', title: 'Bitcoin above $100K Jan 31?', yes_price: 0.34, volume: 8900000, volume_24h: 1200000, category: 'tech', url: 'https://kalshi.com/markets/kxbtcmaxy', commentary: 'Currently around $91K. Need 10% rally in 6 days.', question: 'Fed meeting the catalyst?' },
-  { ticker: 'KXBTCMAXY-95K', title: 'Bitcoin above $95K Jan 31?', yes_price: 0.73, volume: 5600000, volume_24h: 780000, category: 'tech', url: 'https://kalshi.com/markets/kxbtcmaxy', commentary: 'More achievable target. ETF flows supportive.', question: 'Whale selling slowing?' },
-  { ticker: 'KXBTCMAXY-150K', title: 'Bitcoin above $150K in 2026?', yes_price: 0.45, volume: 12000000, volume_24h: 890000, category: 'tech', url: 'https://kalshi.com/markets/kxbtcmaxy', commentary: 'Bull case requires new ATH breakout.', question: 'Halving effect kicks in?' },
-  { ticker: 'KXETHMAXY-5K', title: 'Ethereum above $5K in 2026?', yes_price: 0.38, volume: 4500000, volume_24h: 340000, category: 'tech', url: 'https://kalshi.com/markets/kxethmaxy', commentary: 'Lagging Bitcoin. ETF flows disappointing.', question: 'Layer 2 growth enough?' },
-  { ticker: 'KXTSLA-400', title: 'Tesla above $400 Feb 1?', yes_price: 0.52, volume: 3400000, volume_24h: 340000, category: 'tech', url: 'https://kalshi.com/markets/kxtsla', commentary: 'Currently around $395. Q4 earnings this week.', question: 'Musk DOGE distraction?' },
-  { ticker: 'KXTSLA-500', title: 'Tesla above $500 by June?', yes_price: 0.35, volume: 2800000, volume_24h: 180000, category: 'tech', url: 'https://kalshi.com/markets/kxtsla', commentary: 'FSD V13 rollout key. China competition tough.', question: 'Robotaxi hype real?' },
-  { ticker: 'KXNVDA-150', title: 'NVIDIA above $145 Feb 1?', yes_price: 0.63, volume: 2800000, volume_24h: 230000, category: 'tech', url: 'https://kalshi.com/markets/kxnvda', commentary: 'Blackwell demand exceeding supply.', question: 'China restrictions priced in?' },
-  { ticker: 'KXNVDA-200', title: 'NVIDIA above $200 by June?', yes_price: 0.42, volume: 2100000, volume_24h: 150000, category: 'tech', url: 'https://kalshi.com/markets/kxnvda', commentary: 'Would require continued AI capex boom.', question: 'Competition from AMD/Intel?' },
-  { ticker: 'KXOPENAI-ELON', title: 'Musk wins lawsuit against OpenAI?', yes_price: 0.60, volume: 4500000, volume_24h: 560000, category: 'tech', url: 'https://kalshi.com/markets/kxopenai', commentary: '23¢ spike this month. Discovery docs dropping.', question: 'Settlement more likely?' },
-  { ticker: 'KXOPENAI-IPO', title: 'OpenAI IPO in 2026?', yes_price: 0.28, volume: 2300000, volume_24h: 120000, category: 'tech', url: 'https://kalshi.com/markets/kxopenai', commentary: 'Converting to for-profit. Valuation $150B+.', question: 'Market conditions right?' },
-  { ticker: 'KXMETA-700', title: 'Meta above $700 by March?', yes_price: 0.55, volume: 1800000, volume_24h: 89000, category: 'tech', url: 'https://kalshi.com/markets/kxmeta', commentary: 'Currently around $630. AI monetization working.', question: 'Threads stealing X users?' },
-  { ticker: 'KXAAPL-250', title: 'Apple above $250 by March?', yes_price: 0.42, volume: 1500000, volume_24h: 67000, category: 'tech', url: 'https://kalshi.com/markets/kxaapl', commentary: 'iPhone 16 cycle. Apple Intelligence rollout.', question: 'Services growth key?' },
-  { ticker: 'KXGOOG-200', title: 'Alphabet above $200 by March?', yes_price: 0.48, volume: 1200000, volume_24h: 56000, category: 'tech', url: 'https://kalshi.com/markets/kxgoog', commentary: 'Gemini competing with ChatGPT. Search under threat.', question: 'DOJ breakup risk?' },
-  { ticker: 'KXAI-AGENT', title: 'AI agent completes $1M task in 2026?', yes_price: 0.35, volume: 890000, volume_24h: 45000, category: 'tech', url: 'https://kalshi.com/markets/kxai', commentary: 'Agents getting better at coding, research.', question: 'AGI closer than expected?' },
-  { ticker: 'KXAI-JOB', title: 'Major AI layoff announcement (>10K)?', yes_price: 0.52, volume: 1200000, volume_24h: 67000, category: 'tech', url: 'https://kalshi.com/markets/kxai', commentary: 'AI automating white collar work faster.', question: 'Which industry first?' },
-  { ticker: 'KXTWITTER-IPO', title: 'X/Twitter IPO or sale in 2026?', yes_price: 0.18, volume: 890000, volume_24h: 34000, category: 'tech', url: 'https://kalshi.com/markets/kxtwitter', commentary: 'Musk focused on AI. Platform stabilizing.', question: 'Valuation recovery?' },
-  { ticker: 'KXTIKTOK-BAN', title: 'TikTok banned/sold by March?', yes_price: 0.65, volume: 3400000, volume_24h: 230000, category: 'tech', url: 'https://kalshi.com/markets/kxtiktok', commentary: 'Supreme Court upheld ban. Trump extended deadline.', question: 'ByteDance blinks?' },
-
-  // ==================== CULTURE (16 markets) ====================
-  { ticker: 'KXOSCARPIC-BATTLE', title: 'One Battle After Another wins Best Picture?', yes_price: 0.67, volume: 2800000, volume_24h: 180000, category: 'culture', url: 'https://kalshi.com/markets/kxoscarpic', commentary: 'PTA frontrunner. DiCaprio + Anderson combo.', question: 'Finally Oscar for PTA?' },
-  { ticker: 'KXOSCARPIC-HAMNET', title: 'Hamnet wins Best Picture?', yes_price: 0.18, volume: 2800000, volume_24h: 89000, category: 'culture', url: 'https://kalshi.com/markets/kxoscarpic', commentary: 'TIFF People\'s Choice winner. Strong contender.', question: 'Shakespeare fatigue?' },
-  { ticker: 'KXOSCARACTO-LEO', title: 'DiCaprio wins Best Actor?', yes_price: 0.52, volume: 1800000, volume_24h: 120000, category: 'culture', url: 'https://kalshi.com/markets/kxoscaracto', commentary: 'One Battle After Another performance acclaimed.', question: 'Second Oscar?' },
-  { ticker: 'KXOSCARACTO-MESCAL', title: 'Paul Mescal wins Best Actor?', yes_price: 0.22, volume: 1800000, volume_24h: 67000, category: 'culture', url: 'https://kalshi.com/markets/kxoscaracto', commentary: 'Hamnet Shakespeare role. Rising star.', question: 'Too soon?' },
-  { ticker: 'KXOSCARACTR-BUCKLEY', title: 'Jessie Buckley wins Best Actress?', yes_price: 0.78, volume: 1500000, volume_24h: 89000, category: 'culture', url: 'https://kalshi.com/markets/kxoscaractr', commentary: 'Hamnet dominating actress race.', question: 'Lock or upset possible?' },
-  { ticker: 'KXOSCARDIR-PTA', title: 'PTA wins Best Director?', yes_price: 0.58, volume: 1200000, volume_24h: 67000, category: 'culture', url: 'https://kalshi.com/markets/kxoscardir', commentary: '11 previous nominations. Zero wins.', question: 'Finally his year?' },
-  { ticker: 'KXGRAMAOTY-BEYONCE', title: 'Beyoncé wins Album of the Year?', yes_price: 0.62, volume: 2300000, volume_24h: 340000, category: 'culture', url: 'https://kalshi.com/markets/kxgramaoty', commentary: 'Cowboy Carter heavy favorite. Feb 2 ceremony.', question: 'Will the snub streak end?' },
-  { ticker: 'KXGRAMROTY-BEYONCE', title: 'Beyoncé wins Record of the Year?', yes_price: 0.55, volume: 1800000, volume_24h: 180000, category: 'culture', url: 'https://kalshi.com/markets/kxgramroty', commentary: 'Texas Hold \'Em was massive hit.', question: 'Country crossover rewarded?' },
-  { ticker: 'KXGRAMSOTY-SHABOOZEY', title: 'Shaboozey wins Song of the Year?', yes_price: 0.35, volume: 1200000, volume_24h: 89000, category: 'culture', url: 'https://kalshi.com/markets/kxgramsoty', commentary: 'A Bar Song (Tipsy) was #1 for 19 weeks.', question: 'Historic country moment?' },
-  { ticker: 'KXGRAMBNA-CHAPPELL', title: 'Chappell Roan wins Best New Artist?', yes_price: 0.72, volume: 1500000, volume_24h: 120000, category: 'culture', url: 'https://kalshi.com/markets/kxgrambna', commentary: 'Good Luck Babe! breakout. Massive 2025.', question: 'Sabrina Carpenter spoiler?' },
-  { ticker: 'KXEMMYS-COMEDY', title: 'Hacks wins Outstanding Comedy Series?', yes_price: 0.48, volume: 890000, volume_24h: 45000, category: 'culture', url: 'https://kalshi.com/markets/kxemmys', commentary: 'Jean Smart phenomenon continues.', question: 'Abbott Elementary threat?' },
-  { ticker: 'KXEMMYS-DRAMA', title: 'The Last of Us wins Outstanding Drama?', yes_price: 0.42, volume: 1100000, volume_24h: 67000, category: 'culture', url: 'https://kalshi.com/markets/kxemmys', commentary: 'Season 2 premiered. Even darker.', question: 'Industry or Slow Horses?' },
-  { ticker: 'KXGLOBES-BP', title: 'One Battle After Another wins Globe?', yes_price: 0.58, volume: 890000, volume_24h: 34000, category: 'culture', url: 'https://kalshi.com/markets/kxglobes', commentary: 'Already won. Good Oscar predictor.', question: 'Momentum into March?' },
-  { ticker: 'KXPODCAST-ROGAN', title: 'Rogan remains #1 podcast?', yes_price: 0.82, volume: 450000, volume_24h: 23000, category: 'culture', url: 'https://kalshi.com/markets/kxpodcast', commentary: 'Spotify deal renewed. Dominant position.', question: 'Call Her Daddy catching up?' },
-  { ticker: 'KXMUSIC-OASIS', title: 'Highest grossing tour 2026 = Oasis?', yes_price: 0.45, volume: 670000, volume_24h: 34000, category: 'culture', url: 'https://kalshi.com/markets/kxmusic', commentary: 'Reunion tour massive demand.', question: 'Taylor Swift Eras still going?' },
-  { ticker: 'KXMOVIE-AVATAR', title: 'Avatar 3 highest grossing of 2026?', yes_price: 0.52, volume: 1200000, volume_24h: 67000, category: 'culture', url: 'https://kalshi.com/markets/kxmovie', commentary: 'December release. Cameron track record.', question: 'Superhero fatigue helps?' },
-
-  // ==================== WEATHER (15 markets) ====================
-  { ticker: 'KXHIGHNY-40', title: 'NYC high above 40°F today?', yes_price: 0.55, volume: 340000, volume_24h: 45000, category: 'weather', url: 'https://kalshi.com/markets/kxhighny', commentary: 'January thaw continuing. Mild pattern.', question: 'February cold snap coming?' },
-  { ticker: 'KXHIGHNY-50', title: 'NYC high above 50°F this week?', yes_price: 0.28, volume: 230000, volume_24h: 34000, category: 'weather', url: 'https://kalshi.com/markets/kxhighny', commentary: 'Unusual warmth for late January.', question: 'Record territory?' },
-  { ticker: 'KXSNOW-NYC', title: 'NYC snowfall above 1" this week?', yes_price: 0.35, volume: 180000, volume_24h: 23000, category: 'weather', url: 'https://kalshi.com/markets/kxsnow', commentary: 'Storm system possible midweek.', question: 'Accumulating or just flurries?' },
-  { ticker: 'KXSNOW-CHI', title: 'Chicago snowfall above 3" this week?', yes_price: 0.42, volume: 230000, volume_24h: 34000, category: 'weather', url: 'https://kalshi.com/markets/kxsnow', commentary: 'Lake effect watch. Models diverging.', question: 'Clipper system wild card?' },
-  { ticker: 'KXSNOW-BOS', title: 'Boston snowfall above 2" this week?', yes_price: 0.38, volume: 150000, volume_24h: 18000, category: 'weather', url: 'https://kalshi.com/markets/kxsnow', commentary: 'Coastal storm track uncertain.', question: 'Patriots parade weather?' },
-  { ticker: 'KXRAIN-LA', title: 'LA rainfall above 0.5" this week?', yes_price: 0.22, volume: 180000, volume_24h: 23000, category: 'weather', url: 'https://kalshi.com/markets/kxrain', commentary: 'Dry spell continues. Fire risk elevated.', question: 'Atmospheric river coming?' },
-  { ticker: 'KXRAIN-SF', title: 'SF rainfall above 1" this week?', yes_price: 0.35, volume: 120000, volume_24h: 15000, category: 'weather', url: 'https://kalshi.com/markets/kxrain', commentary: 'Pacific system approaching.', question: 'Drought relief finally?' },
-  { ticker: 'KXHURRICANE-2026', title: 'Major hurricane hits US in 2026?', yes_price: 0.78, volume: 890000, volume_24h: 34000, category: 'weather', url: 'https://kalshi.com/markets/kxhurricane', commentary: 'La Niña pattern. Active season expected.', question: 'Florida or Gulf Coast?' },
-  { ticker: 'KXHURRICANE-COUNT', title: 'More than 15 named storms in 2026?', yes_price: 0.65, volume: 670000, volume_24h: 23000, category: 'weather', url: 'https://kalshi.com/markets/kxhurricane', commentary: 'Warm Atlantic waters. Above average predicted.', question: 'Climate change signal?' },
-  { ticker: 'KXTEMP-GLOBAL', title: '2026 hottest year on record?', yes_price: 0.58, volume: 450000, volume_24h: 18000, category: 'weather', url: 'https://kalshi.com/markets/kxtemp', commentary: '2025 broke records. Trend continuing.', question: 'El Niño fading helps?' },
-  { ticker: 'KXWILDFIRE-CA', title: 'California wildfire burns 100K+ acres?', yes_price: 0.72, volume: 340000, volume_24h: 23000, category: 'weather', url: 'https://kalshi.com/markets/kxwildfire', commentary: 'Dry conditions. Fire season starting early.', question: 'LA fires contained?' },
-  { ticker: 'KXDROUGHT-SW', title: 'Southwest drought emergency in 2026?', yes_price: 0.45, volume: 230000, volume_24h: 12000, category: 'weather', url: 'https://kalshi.com/markets/kxdrought', commentary: 'Colorado River stressed. Lake Mead low.', question: 'Water rationing?' },
-  { ticker: 'KXHEAT-AZ', title: 'Phoenix hits 120°F in 2026?', yes_price: 0.42, volume: 180000, volume_24h: 8000, category: 'weather', url: 'https://kalshi.com/markets/kxheat', commentary: 'Record heat in 2025. Trend continuing.', question: 'Habitability concerns?' },
-  { ticker: 'KXFLOOD-MIDWEST', title: 'Major Midwest flooding in 2026?', yes_price: 0.52, volume: 230000, volume_24h: 12000, category: 'weather', url: 'https://kalshi.com/markets/kxflood', commentary: 'Spring melt + rain pattern uncertain.', question: 'Mississippi or Missouri?' },
-  { ticker: 'KXTORNADO-2026', title: 'EF5 tornado in 2026?', yes_price: 0.38, volume: 340000, volume_24h: 18000, category: 'weather', url: 'https://kalshi.com/markets/kxtornado', commentary: 'Rare but devastating. Oklahoma vulnerable.', question: 'Climate shifting patterns?' },
+  // ==================== WEATHER ====================
+  { ticker: 'KXHIGHNY-26MAR15-T47', title: 'NYC high temperature below 47°F on March 15?', yes_price: 0.01, volume: 84790, volume_24h: 42000, category: 'weather', url: 'https://kalshi.com/markets/kxhighny', commentary: 'Resolved near 1c. Surprisingly high volume for weather.', question: 'Who\'s trading the weather?' },
+  { ticker: 'KXHIGHNY-26MAR15-B51.5', title: 'NYC high 51-52°F on March 15?', yes_price: 0.12, volume: 25894, volume_24h: 12000, category: 'weather', url: 'https://kalshi.com/markets/kxhighny', commentary: 'Mid-range temperature bracket for today.', question: 'Spring arriving early?' },
+  { ticker: 'KXHIGHNY-26MAR15-T54', title: 'NYC high above 54°F on March 15?', yes_price: 0.01, volume: 11662, volume_24h: 5800, category: 'weather', url: 'https://kalshi.com/markets/kxhighny', commentary: 'Unlikely to get that warm today.', question: 'Coat or no coat?' },
 ];
 
 const CATEGORIES = [
   { id: 'home', label: 'Front Page' },
   { id: 'economics', label: 'Economics' },
-  { id: 'politics', label: 'Politics' },
   { id: 'sports', label: 'Sports' },
   { id: 'tech', label: 'Tech' },
-  { id: 'culture', label: 'Culture' },
   { id: 'weather', label: 'Weather' },
 ];
 
@@ -554,20 +467,15 @@ const FrontPage = ({ markets, onCategoryClick }) => {
       </div>
       
       {/* Category previews */}
-      <CategoryPreview 
-        title="Economics" 
-        markets={markets.economics || []} 
-        onViewAll={() => onCategoryClick('economics')} 
+      <CategoryPreview
+        title="Economics"
+        markets={markets.economics || []}
+        onViewAll={() => onCategoryClick('economics')}
       />
-      <CategoryPreview 
-        title="Politics" 
-        markets={markets.politics || []} 
-        onViewAll={() => onCategoryClick('politics')} 
-      />
-      <CategoryPreview 
-        title="Sports" 
-        markets={markets.sports || []} 
-        onViewAll={() => onCategoryClick('sports')} 
+      <CategoryPreview
+        title="Sports"
+        markets={markets.sports || []}
+        onViewAll={() => onCategoryClick('sports')}
       />
     </div>
   );
@@ -634,23 +542,18 @@ const SidebarContent = ({ markets, activeCategory, onCategoryClick }) => {
         </div>
       )}
       
-      {/* Tech & Culture previews on front page */}
+      {/* Tech & Weather previews on front page */}
       {activeCategory === 'home' && (
         <>
-          <CategoryPreview 
-            title="Tech" 
-            markets={markets.tech || []} 
-            onViewAll={() => onCategoryClick('tech')} 
+          <CategoryPreview
+            title="Tech"
+            markets={markets.tech || []}
+            onViewAll={() => onCategoryClick('tech')}
           />
-          <CategoryPreview 
-            title="Culture" 
-            markets={markets.culture || []} 
-            onViewAll={() => onCategoryClick('culture')} 
-          />
-          <CategoryPreview 
-            title="Weather" 
-            markets={markets.weather || []} 
-            onViewAll={() => onCategoryClick('weather')} 
+          <CategoryPreview
+            title="Weather"
+            markets={markets.weather || []}
+            onViewAll={() => onCategoryClick('weather')}
           />
         </>
       )}
@@ -661,28 +564,28 @@ const SidebarContent = ({ markets, activeCategory, onCategoryClick }) => {
   );
 };
 
-// News articles from news.kalshi.com (verified real articles)
+// News articles — pointers to Kalshi's blog
 const NEWS_ARTICLES = [
   {
-    title: "2026 Recession Odds Fall to All-Time Low",
-    summary: "Strong Q3 GDP growth sends recession odds to 25¢, down from 42¢ in July. Traders grow optimistic about the U.S. economy heading into the new year.",
-    url: "https://news.kalshi.com/p/2026-recession-odds-all-time-low",
-    date: "Jan 18, 2026",
+    title: "2026 Recession Odds Climb to 33%",
+    summary: "Tariff uncertainty pushes recession probability up from January lows. Markets pricing in rising risk of two consecutive quarters of negative GDP.",
+    url: "https://news.kalshi.com/",
+    date: "Mar 14, 2026",
     tag: "Economics"
   },
   {
-    title: "Kalshi's 2026 Senate Election Guide",
-    summary: "Republicans hold 53 seats, Democrats need 4 to flip control. Here's what markets are signaling about the fight for the upper chamber.",
-    url: "https://news.kalshi.com/p/2026-senate-election-guide",
-    date: "Jan 18, 2026",
-    tag: "Politics"
+    title: "NBA Finals: Thunder Clear Favorites at 38%",
+    summary: "OKC dominates regular season as SGA leads MVP race. Spurs generate huge volume on Wembanyama hype despite lower odds.",
+    url: "https://news.kalshi.com/",
+    date: "Mar 13, 2026",
+    tag: "Sports"
   },
   {
-    title: "How Scandals Shift Election Odds Overnight",
-    summary: "Why traders spot election turning points before polls do. Understanding real-time shifts in modern political forecasting.",
-    url: "https://news.kalshi.com/p/election-odds-shifts",
-    date: "Jan 17, 2026",
-    tag: "Politics"
+    title: "Q1 GDP: Markets Expect Solid 2-2.5% Growth",
+    summary: "Kalshi traders see 66% chance GDP exceeds 2%. Advance estimate due April 30. Consumer spending remains the key driver.",
+    url: "https://news.kalshi.com/",
+    date: "Mar 12, 2026",
+    tag: "Economics"
   },
 ];
 
@@ -785,10 +688,8 @@ const NewsSection = () => (
 const processMarketsIntoCategories = (rawMarkets, configMap) => {
   const categorized = {
     economics: [],
-    politics: [],
     sports: [],
     tech: [],
-    culture: [],
     weather: [],
     other: []
   };
@@ -833,96 +734,99 @@ const processMarketsIntoCategories = (rawMarkets, configMap) => {
   return categorized;
 };
 
-// Fetch markets from Kalshi API
+// Fetch markets from Kalshi public API by series
 const fetchKalshiMarkets = async () => {
   const configMap = {};
   MARKET_CONFIG.forEach(c => {
     configMap[c.series] = { category: c.category, url: c.url };
   });
-  
-  // Try multiple data sources in order of preference
-  const dataSources = [
-    // 1. Local JSON file (generated by Python script)
-    { type: 'json', url: './kalshi_dashboard_data.json' },
-    { type: 'json', url: '/kalshi_dashboard_data.json' },
-    // 2. CORS proxy to Kalshi API (for browser environments)
-    { type: 'api', url: `https://corsproxy.io/?${encodeURIComponent(API_BASE + '/markets?status=open&limit=200')}` },
-    // 3. Direct API (works in non-browser or if CORS disabled)
-    { type: 'api', url: `${API_BASE}/markets?status=open&limit=200` },
-  ];
-  
-  for (const source of dataSources) {
+
+  let allMarkets = [];
+  let anySuccess = false;
+
+  // Fetch each series in parallel for speed
+  const fetchPromises = MARKET_CONFIG.map(async (config) => {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      
-      const response = await fetch(source.url, {
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      const url = `${API_BASE}/markets?series_ticker=${config.series}&status=open&limit=30`;
+      const response = await fetch(url, {
         signal: controller.signal,
-        headers: { 'Accept': 'application/json' }
+        headers: { 'Accept': 'application/json' },
       });
       clearTimeout(timeoutId);
-      
-      if (!response.ok) continue;
-      
+
+      if (!response.ok) return [];
+
       const data = await response.json();
-      
-      // Handle JSON file format (from Python script)
-      if (source.type === 'json' && data.markets) {
-        console.log('Loaded data from JSON file:', source.url);
-        return { 
-          markets: data.markets, 
-          error: null, 
-          isLive: true,
-          timestamp: data.timestamp 
-        };
-      }
-      
-      // Handle direct API response
-      if (source.type === 'api' && data.markets) {
-        const markets = data.markets || [];
-        const filtered = markets.filter(m => 
-          m.volume_24h > 10000 || 
-          MARKET_CONFIG.some(c => m.series_ticker?.startsWith(c.series))
-        );
-        
-        if (filtered.length > 0) {
-          console.log('Loaded data from API:', source.url);
-          return { 
-            markets: processMarketsIntoCategories(filtered, configMap), 
-            error: null, 
-            isLive: true 
-          };
-        }
-      }
+      const markets = (data.markets || []).map(m => ({
+        ...m,
+        _category: config.category,
+        _seriesUrl: config.url,
+      }));
+      return markets;
     } catch (err) {
-      console.log('Source failed:', source.url, err.message);
-      continue;
+      console.log(`Failed to fetch ${config.series}:`, err.message);
+      return [];
     }
+  });
+
+  const results = await Promise.all(fetchPromises);
+  results.forEach(markets => {
+    if (markets.length > 0) anySuccess = true;
+    allMarkets.push(...markets);
+  });
+
+  if (anySuccess && allMarkets.length > 0) {
+    console.log(`Loaded ${allMarkets.length} markets from Kalshi API`);
+    // Convert API fields to our format
+    const processed = allMarkets.map(m => {
+      const yesBid = parseFloat(m.yes_bid_dollars || m.yes_bid || 0);
+      const yesAsk = parseFloat(m.yes_ask_dollars || m.yes_ask || 0);
+      const lastPrice = parseFloat(m.last_price_dollars || m.last_price || 0);
+      const yesPrice = lastPrice || yesBid || (yesAsk > 0 ? yesAsk - 0.01 : 0.5);
+
+      return {
+        ticker: m.ticker,
+        title: m.title,
+        yes_price: yesPrice,
+        volume: m.volume_fp || m.volume || 0,
+        volume_24h: m.volume_24h_fp || m.volume_24h || 0,
+        category: m._category,
+        url: m._seriesUrl || `https://kalshi.com/markets/${(m.series_ticker || m.ticker.split('-')[0]).toLowerCase()}`,
+        series_ticker: m.series_ticker || m.ticker.split('-')[0],
+      };
+    });
+
+    return {
+      markets: processMarketsIntoCategories(processed, configMap),
+      error: null,
+      isLive: true,
+    };
   }
-  
-  // All sources failed, use fallback data
-  console.log('Using embedded sample data');
+
+  // All fetches failed — use fallback data
+  console.log('Using embedded fallback data');
   const fallbackConfigMap = {};
   FALLBACK_MARKETS.forEach(m => {
     fallbackConfigMap[m.ticker] = { category: m.category, url: m.url };
   });
-  return { 
+  return {
     markets: processMarketsIntoCategories(FALLBACK_MARKETS.map(m => ({
       ...m,
       series_ticker: m.ticker.split('-')[0],
-    })), fallbackConfigMap), 
-    error: 'Using sample data',
-    isLive: false
+    })), fallbackConfigMap),
+    error: 'Using sample data — live API unavailable',
+    isLive: false,
   };
 };
 
 export default function KalshiNewspaper() {
   const [markets, setMarkets] = useState({
     economics: [],
-    politics: [],
     sports: [],
     tech: [],
-    culture: [],
     weather: [],
     other: []
   });
