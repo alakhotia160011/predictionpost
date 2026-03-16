@@ -1,0 +1,5 @@
+.env
+*.pem
+ary kalshi API.txt
+node_modules/
+__pycache__/
