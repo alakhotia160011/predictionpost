@@ -1,8 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
 // Kalshi API base URL (public, no auth needed)
 const API_BASE = 'https://api.elections.kalshi.com/trade-api/v2';
+
+// Use serverless proxy when deployed on Vercel, direct API locally
+const useProxy = typeof window !== 'undefined' && window.location.hostname !== 'localhost';
+const proxyBase = useProxy ? '/api' : null;
 
 // Series to fetch with their categories — only series with active markets as of March 2026
 const MARKET_CONFIG = [
@@ -81,6 +85,95 @@ const formatCents = (num) => {
   return `${Math.round(num * 100)}¢`;
 };
 
+const formatNumber = (num) => {
+  if (!num) return '0';
+  return num.toLocaleString();
+};
+
+// ─────────────────────────────────────────────────
+// FEATURE 2: Inline SVG Sparkline (no library)
+// ─────────────────────────────────────────────────
+const Sparkline = ({ data, width = 100, height = 28, strokeWidth = 1 }) => {
+  if (!data || data.length < 2) {
+    return (
+      <svg width={width} height={height} style={{ display: 'block' }}>
+        <line x1={0} y1={height / 2} x2={width} y2={height / 2} stroke="#ccc" strokeWidth={1} strokeDasharray="2,2" />
+      </svg>
+    );
+  }
+
+  const prices = data.map(d => (typeof d === 'number' ? d : d.price));
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const range = max - min || 0.01;
+  const pad = 2;
+
+  const points = prices.map((p, i) => {
+    const x = (i / (prices.length - 1)) * (width - pad * 2) + pad;
+    const y = height - pad - ((p - min) / range) * (height - pad * 2);
+    return `${x},${y}`;
+  });
+
+  const first = prices[0];
+  const last = prices[prices.length - 1];
+  const color = last > first ? '#2a7a2a' : last < first ? '#8b1a1a' : '#888';
+
+  return (
+    <svg width={width} height={height} style={{ display: 'block' }}>
+      <polyline
+        points={points.join(' ')}
+        fill="none"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+};
+
+// ─────────────────────────────────────────────────
+// FEATURE 1: Trade Link button
+// ─────────────────────────────────────────────────
+const TradeLink = ({ ticker }) => {
+  const url = `https://kalshi.com/markets/${ticker.toLowerCase()}`;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        fontFamily: 'Georgia, serif',
+        fontSize: 8,
+        letterSpacing: '0.12em',
+        textTransform: 'uppercase',
+        color: '#faf9f6',
+        backgroundColor: '#1a1a1a',
+        padding: '3px 8px',
+        textDecoration: 'none',
+        display: 'inline-block',
+        transition: 'all 0.15s',
+      }}
+      onMouseOver={e => {
+        e.currentTarget.style.backgroundColor = '#faf9f6';
+        e.currentTarget.style.color = '#1a1a1a';
+        e.currentTarget.style.outline = '1px solid #1a1a1a';
+      }}
+      onMouseOut={e => {
+        e.currentTarget.style.backgroundColor = '#1a1a1a';
+        e.currentTarget.style.color = '#faf9f6';
+        e.currentTarget.style.outline = 'none';
+      }}
+    >
+      Trade →
+    </a>
+  );
+};
+
+// ─────────────────────────────────────────────────
+// Existing mini sparkline (recharts) for backwards compat
+// ─────────────────────────────────────────────────
 const MiniSparkline = ({ data, color }) => {
   if (!data || data.length === 0) return null;
   const chartData = data.map((v, i) => ({ value: v }));
@@ -95,41 +188,49 @@ const MiniSparkline = ({ data, color }) => {
   );
 };
 
-const MarketCard = ({ market, featured, showCategory }) => {
+// ─────────────────────────────────────────────────
+// MarketCard — now with Trade link + sparkline + click-to-open-drawer
+// ─────────────────────────────────────────────────
+const MarketCard = ({ market, featured, showCategory, historyData, onOpenDrawer }) => {
   const priceChange = market.price_change || 0;
   const isUp = priceChange >= 0;
   const trendColor = isUp ? '#15803d' : '#dc2626';
-  
-  // Generate 7-day sparkline with realistic weekly movement
-  const weeklyChange = (Math.random() - 0.4) * 0.15; // Overall weekly trend
+
+  // Use real history data for sparkline, fall back to generated data
+  const hasRealHistory = historyData && historyData.length >= 2;
+
+  // Generate 7-day sparkline with realistic weekly movement (fallback)
+  const weeklyChange = (Math.random() - 0.4) * 0.15;
   const weekSeries = Array(7).fill(0).map((_, i) => {
     const trendComponent = (weeklyChange * i) / 6;
     const noise = (Math.random() - 0.5) * 0.04;
     const basePrice = market.yes_price || 0.5;
     return Math.max(0.02, Math.min(0.98, basePrice - weeklyChange + trendComponent + noise));
   });
-  
-  // Sparkline color based on actual line direction (first vs last point)
+
   const sparklineUp = weekSeries[6] > weekSeries[0];
   const sparklineColor = sparklineUp ? '#15803d' : '#dc2626';
-  
+
+  const handleClick = (e) => {
+    // Don't open drawer if clicking a link
+    if (e.target.tagName === 'A' || e.target.closest('a')) return;
+    onOpenDrawer && onOpenDrawer(market);
+  };
+
   if (featured) {
     return (
-      <a 
-        href={market.url || 'https://kalshi.com'}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
-      >
-      <div style={{
-        borderBottom: '1px solid #1a1a1a',
-        paddingBottom: 20,
-        marginBottom: 20,
-        cursor: 'pointer',
-        transition: 'background-color 0.15s',
-      }}
-      onMouseOver={e => e.currentTarget.style.backgroundColor = '#f5f5f0'}
-      onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
+      <div
+        onClick={handleClick}
+        style={{
+          borderBottom: '1px solid #1a1a1a',
+          paddingBottom: 20,
+          marginBottom: 20,
+          cursor: 'pointer',
+          transition: 'background-color 0.15s',
+          position: 'relative',
+        }}
+        onMouseOver={e => e.currentTarget.style.backgroundColor = '#f5f5f0'}
+        onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
           <span style={{
@@ -153,7 +254,7 @@ const MarketCard = ({ market, featured, showCategory }) => {
           marginBottom: 12,
           color: '#1a1a1a',
         }}>{market.title}</h2>
-        
+
         <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 12 }}>
           <div>
             <div style={{
@@ -168,20 +269,27 @@ const MarketCard = ({ market, featured, showCategory }) => {
               color: trendColor,
             }}>{isUp ? '↑' : '↓'} {Math.abs(priceChange * 100).toFixed(0)}¢ 24h</div>
           </div>
-          <div style={{ flex: 1, height: 50 }}>
-            <ResponsiveContainer>
-              <AreaChart data={weekSeries.map((v, i) => ({ day: i, value: v }))} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
-                <Area type="monotone" dataKey="value" stroke={sparklineColor} fill={sparklineColor} fillOpacity={0.1} strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+          {/* Sparkline: real history or recharts fallback */}
+          {hasRealHistory ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+              <Sparkline data={historyData} width={200} height={50} strokeWidth={2} />
+            </div>
+          ) : (
+            <div style={{ flex: 1, height: 50 }}>
+              <ResponsiveContainer>
+                <AreaChart data={weekSeries.map((v, i) => ({ day: i, value: v }))} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                  <Area type="monotone" dataKey="value" stroke={sparklineColor} fill={sparklineColor} fillOpacity={0.1} strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontFamily: '"Franklin Gothic Medium", Arial Narrow, sans-serif', fontSize: 10, color: '#666', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Volume</div>
             <div style={{ fontFamily: '"Courier New", monospace', fontSize: 16, fontWeight: 600 }}>{formatVolume(market.volume)}</div>
             <div style={{ fontFamily: 'Georgia, serif', fontSize: 10, color: '#888' }}>{formatVolume(market.volume_24h)} today</div>
           </div>
         </div>
-        
+
         {/* Commentary */}
         {market.commentary && (
           <div style={{
@@ -199,14 +307,10 @@ const MarketCard = ({ market, featured, showCategory }) => {
             }}>{market.commentary}</p>
           </div>
         )}
-        
-        {/* Question */}
-        {market.question && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-          }}>
+
+        {/* Question + Trade Link */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          {market.question ? (
             <p style={{
               fontFamily: 'Georgia, serif',
               fontSize: 12,
@@ -214,28 +318,24 @@ const MarketCard = ({ market, featured, showCategory }) => {
               color: '#666',
               margin: 0,
             }}>{market.question}</p>
-          </div>
-        )}
+          ) : <span />}
+          <TradeLink ticker={market.ticker} />
+        </div>
       </div>
-      </a>
     );
   }
-  
+
   return (
-    <a 
-      href={market.url || 'https://kalshi.com'}
-      target="_blank"
-      rel="noopener noreferrer"
-      style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
-    >
-    <div style={{
-      padding: '10px 0',
-      borderBottom: '1px solid #e5e5e5',
-      cursor: 'pointer',
-      transition: 'background-color 0.15s',
-    }}
-    onMouseOver={e => e.currentTarget.style.backgroundColor = '#f5f5f0'}
-    onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
+    <div
+      onClick={handleClick}
+      style={{
+        padding: '10px 0',
+        borderBottom: '1px solid #e5e5e5',
+        cursor: 'pointer',
+        transition: 'background-color 0.15s',
+      }}
+      onMouseOver={e => e.currentTarget.style.backgroundColor = '#f5f5f0'}
+      onMouseOut={e => e.currentTarget.style.backgroundColor = 'transparent'}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
         <div style={{ flex: 1 }}>
@@ -254,7 +354,12 @@ const MarketCard = ({ market, featured, showCategory }) => {
             letterSpacing: '0.05em',
           }}>{formatVolume(market.volume_24h)} today · {market.ticker}</div>
         </div>
-        <MiniSparkline data={weekSeries} color={sparklineColor} />
+        {/* Sparkline for sidebar cards: below the price area */}
+        {hasRealHistory ? (
+          <Sparkline data={historyData} width={60} height={24} strokeWidth={1} />
+        ) : (
+          <MiniSparkline data={weekSeries} color={sparklineColor} />
+        )}
         <div style={{ textAlign: 'right', minWidth: 45 }}>
           <div style={{
             fontFamily: '"Courier New", monospace',
@@ -269,34 +374,39 @@ const MarketCard = ({ market, featured, showCategory }) => {
           }}>{isUp ? '↑' : '↓'}{Math.abs(priceChange * 100).toFixed(0)}¢</div>
         </div>
       </div>
-      
-      {/* Compact commentary */}
-      {market.commentary && (
-        <p style={{
-          fontFamily: 'Georgia, serif',
-          fontSize: 11,
-          color: '#666',
-          margin: '4px 0 0 0',
-          lineHeight: 1.3,
-        }}>{market.commentary}</p>
-      )}
+
+      {/* Compact commentary + trade link */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        {market.commentary ? (
+          <p style={{
+            fontFamily: 'Georgia, serif',
+            fontSize: 11,
+            color: '#666',
+            margin: '4px 0 0 0',
+            lineHeight: 1.3,
+            flex: 1,
+          }}>{market.commentary}</p>
+        ) : <span />}
+        <div style={{ marginLeft: 8, flexShrink: 0 }}>
+          <TradeLink ticker={market.ticker} />
+        </div>
+      </div>
     </div>
-    </a>
   );
 };
 
 const VolumeChart = ({ markets }) => {
   const allMarkets = Object.values(markets).flat().filter(m => m.volume_24h > 0);
   const topByVolume = [...allMarkets].sort((a, b) => (b.volume_24h || 0) - (a.volume_24h || 0)).slice(0, 6);
-  
+
   if (topByVolume.length === 0) return null;
-  
+
   const chartData = topByVolume.map(m => ({
     name: m.ticker.length > 10 ? m.ticker.slice(0, 10) + '…' : m.ticker,
     volume: (m.volume_24h || 0) / 1000,
     title: m.title,
   }));
-  
+
   return (
     <div style={{ marginBottom: 24 }}>
       <h3 style={{
@@ -315,7 +425,7 @@ const VolumeChart = ({ markets }) => {
           <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 10, left: 0, bottom: 0 }}>
             <XAxis type="number" tickFormatter={(v) => `$${v}K`} style={{ fontFamily: '"Courier New", monospace', fontSize: 9 }} />
             <YAxis type="category" dataKey="name" style={{ fontFamily: '"Courier New", monospace', fontSize: 8 }} width={65} />
-            <Tooltip 
+            <Tooltip
               formatter={(v) => [`$${v.toFixed(0)}K`, 'Volume']}
               labelFormatter={(label, payload) => payload[0]?.payload?.title || label}
               contentStyle={{ fontFamily: 'Georgia, serif', fontSize: 11 }}
@@ -332,8 +442,7 @@ const QuickStats = ({ markets }) => {
   const allMarkets = Object.values(markets).flat();
   const totalVolume24h = allMarkets.reduce((sum, m) => sum + (m.volume_24h || 0), 0);
   const totalVolume = allMarkets.reduce((sum, m) => sum + (m.volume || 0), 0);
-  const avgPrice = allMarkets.reduce((sum, m) => sum + (m.yes_price || 0), 0) / allMarkets.length;
-  
+
   return (
     <div style={{
       display: 'grid',
@@ -360,17 +469,17 @@ const QuickStats = ({ markets }) => {
   );
 };
 
-const CategoryPreview = ({ title, markets, onViewAll }) => {
+const CategoryPreview = ({ title, markets, onViewAll, historyMap, onOpenDrawer }) => {
   const topMarket = markets[0];
   const otherMarkets = markets.slice(1, 3);
-  
+
   if (!topMarket) return null;
-  
+
   return (
     <div style={{ marginBottom: 28 }}>
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
         alignItems: 'center',
         borderBottom: '2px solid #1a1a1a',
         paddingBottom: 6,
@@ -401,21 +510,21 @@ const CategoryPreview = ({ title, markets, onViewAll }) => {
           View All →
         </button>
       </div>
-      
-      <MarketCard market={topMarket} featured showCategory={false} />
-      
+
+      <MarketCard market={topMarket} featured showCategory={false} historyData={historyMap[topMarket.ticker]} onOpenDrawer={onOpenDrawer} />
+
       {otherMarkets.map(m => (
-        <MarketCard key={m.ticker} market={m} showCategory={false} />
+        <MarketCard key={m.ticker} market={m} showCategory={false} historyData={historyMap[m.ticker]} onOpenDrawer={onOpenDrawer} />
       ))}
     </div>
   );
 };
 
-const CategoryPage = ({ title, markets }) => {
+const CategoryPage = ({ title, markets, historyMap, onOpenDrawer }) => {
   const sortedMarkets = [...markets].sort((a, b) => (b.volume_24h || 0) - (a.volume_24h || 0));
   const featured = sortedMarkets[0];
   const rest = sortedMarkets.slice(1);
-  
+
   return (
     <div>
       <h2 style={{
@@ -430,21 +539,21 @@ const CategoryPage = ({ title, markets }) => {
         marginTop: 0,
         marginBottom: 20,
       }}>{title}</h2>
-      
-      {featured && <MarketCard market={featured} featured showCategory={false} />}
-      
+
+      {featured && <MarketCard market={featured} featured showCategory={false} historyData={historyMap[featured.ticker]} onOpenDrawer={onOpenDrawer} />}
+
       {rest.map(m => (
-        <MarketCard key={m.ticker} market={m} showCategory={false} />
+        <MarketCard key={m.ticker} market={m} showCategory={false} historyData={historyMap[m.ticker]} onOpenDrawer={onOpenDrawer} />
       ))}
     </div>
   );
 };
 
-const FrontPage = ({ markets, onCategoryClick }) => {
+const FrontPage = ({ markets, onCategoryClick, historyMap, onOpenDrawer }) => {
   const topByVolume = Object.values(markets).flat()
     .sort((a, b) => (b.volume_24h || 0) - (a.volume_24h || 0))
     .slice(0, 3);
-  
+
   return (
     <div>
       {/* Hero: Top 3 markets */}
@@ -462,29 +571,33 @@ const FrontPage = ({ markets, onCategoryClick }) => {
           marginBottom: 12,
         }}>Top Stories</h3>
         {topByVolume.map((m, i) => (
-          <MarketCard key={m.ticker} market={m} featured={i === 0} showCategory />
+          <MarketCard key={m.ticker} market={m} featured={i === 0} showCategory historyData={historyMap[m.ticker]} onOpenDrawer={onOpenDrawer} />
         ))}
       </div>
-      
+
       {/* Category previews */}
       <CategoryPreview
         title="Economics"
         markets={markets.economics || []}
         onViewAll={() => onCategoryClick('economics')}
+        historyMap={historyMap}
+        onOpenDrawer={onOpenDrawer}
       />
       <CategoryPreview
         title="Sports"
         markets={markets.sports || []}
         onViewAll={() => onCategoryClick('sports')}
+        historyMap={historyMap}
+        onOpenDrawer={onOpenDrawer}
       />
     </div>
   );
 };
 
-const SidebarContent = ({ markets, activeCategory, onCategoryClick }) => {
+const SidebarContent = ({ markets, activeCategory, onCategoryClick, historyMap, onOpenDrawer }) => {
   return (
     <>
-      {/* Market Overview header - aligned with left column */}
+      {/* Market Overview header */}
       <h3 style={{
         fontFamily: '"Franklin Gothic Medium", Arial Narrow, sans-serif',
         fontSize: 12,
@@ -497,10 +610,10 @@ const SidebarContent = ({ markets, activeCategory, onCategoryClick }) => {
         marginTop: 0,
         marginBottom: 12,
       }}>Market Overview</h3>
-      
+
       <QuickStats markets={markets} />
       <VolumeChart markets={markets} />
-      
+
       {/* Quick links to other categories when on a category page */}
       {activeCategory !== 'home' && (
         <div style={{ marginBottom: 24 }}>
@@ -541,7 +654,7 @@ const SidebarContent = ({ markets, activeCategory, onCategoryClick }) => {
           ))}
         </div>
       )}
-      
+
       {/* Tech & Weather previews on front page */}
       {activeCategory === 'home' && (
         <>
@@ -549,15 +662,19 @@ const SidebarContent = ({ markets, activeCategory, onCategoryClick }) => {
             title="Tech"
             markets={markets.tech || []}
             onViewAll={() => onCategoryClick('tech')}
+            historyMap={historyMap}
+            onOpenDrawer={onOpenDrawer}
           />
           <CategoryPreview
             title="Weather"
             markets={markets.weather || []}
             onViewAll={() => onCategoryClick('weather')}
+            historyMap={historyMap}
+            onOpenDrawer={onOpenDrawer}
           />
         </>
       )}
-      
+
       {/* Kalshi News Section */}
       <NewsSection />
     </>
@@ -602,16 +719,16 @@ const NewsSection = () => (
       paddingBottom: 6,
       marginBottom: 12,
     }}>
-      <a 
-        href="https://news.kalshi.com/" 
-        target="_blank" 
+      <a
+        href="https://news.kalshi.com/"
+        target="_blank"
         rel="noopener noreferrer"
         style={{ color: 'inherit', textDecoration: 'none' }}
       >
         Kalshi News
       </a>
     </h3>
-    
+
     {NEWS_ARTICLES.map((article, i) => (
       <a
         key={i}
@@ -665,7 +782,7 @@ const NewsSection = () => (
         }}>{article.summary}</p>
       </a>
     ))}
-    
+
     <a
       href="https://news.kalshi.com/"
       target="_blank"
@@ -684,6 +801,255 @@ const NewsSection = () => (
   </div>
 );
 
+// ─────────────────────────────────────────────────
+// FEATURE 3: Market Detail Drawer
+// ─────────────────────────────────────────────────
+const MarketDrawer = ({ market, onClose, historyData }) => {
+  const [detail, setDetail] = useState(null);
+  const [loadingDetail, setLoadingDetail] = useState(true);
+  const drawerRef = useRef(null);
+
+  // Fetch fresh data from proxy
+  useEffect(() => {
+    if (!market) return;
+    setLoadingDetail(true);
+    const fetchDetail = async () => {
+      try {
+        const url = proxyBase
+          ? `${proxyBase}/market?ticker=${market.ticker}`
+          : `${API_BASE}/markets/${market.ticker}`;
+        const res = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (res.ok) {
+          const data = await res.json();
+          setDetail(data.market || data);
+        }
+      } catch {
+        // use what we have
+      }
+      setLoadingDetail(false);
+    };
+    fetchDetail();
+  }, [market]);
+
+  // Close on Escape
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
+  if (!market) return null;
+
+  const d = detail || {};
+  const yesBid = parseFloat(d.yes_bid_dollars || d.yes_bid || 0);
+  const yesAsk = parseFloat(d.yes_ask_dollars || d.yes_ask || 0);
+  const lastPrice = parseFloat(d.last_price_dollars || d.last_price || market.yes_price || 0);
+  const prevPrice = parseFloat(d.previous_price_dollars || d.previous_price || 0);
+  const change24h = prevPrice > 0 ? lastPrice - prevPrice : market.price_change || 0;
+  const openInterest = d.open_interest_fp || d.open_interest || 0;
+  const tradeUrl = `https://kalshi.com/markets/${market.ticker.toLowerCase()}`;
+
+  return (
+    <>
+      {/* Overlay */}
+      <div
+        onClick={onClose}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(26,24,20,0.15)',
+          zIndex: 999,
+          transition: 'opacity 0.25s',
+        }}
+      />
+      {/* Drawer */}
+      <div
+        ref={drawerRef}
+        style={{
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          bottom: 0,
+          width: 340,
+          maxWidth: '100vw',
+          backgroundColor: '#ede9e1',
+          borderLeft: '1px solid #d5d0c8',
+          zIndex: 1000,
+          overflowY: 'auto',
+          padding: '24px 20px',
+          animation: 'drawerSlideIn 0.25s ease-out',
+        }}
+      >
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            background: 'none',
+            border: 'none',
+            fontSize: 20,
+            color: '#666',
+            cursor: 'pointer',
+            padding: '4px 8px',
+            lineHeight: 1,
+          }}
+        >×</button>
+
+        {/* Full headline */}
+        <h2 style={{
+          fontFamily: 'Georgia, serif',
+          fontSize: 20,
+          fontWeight: 400,
+          lineHeight: 1.25,
+          color: '#1a1a1a',
+          marginBottom: 20,
+          marginRight: 24,
+        }}>{market.title}</h2>
+
+        {loadingDetail && (
+          <div style={{ fontFamily: 'Georgia, serif', fontSize: 12, color: '#888', marginBottom: 16 }}>
+            Loading latest data...
+          </div>
+        )}
+
+        {/* Bid / Ask Spread */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 12,
+          marginBottom: 20,
+        }}>
+          <div style={{
+            backgroundColor: '#faf9f6',
+            padding: '10px 12px',
+          }}>
+            <div style={{ fontFamily: '"Franklin Gothic Medium", Arial Narrow, sans-serif', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666', marginBottom: 4 }}>Yes Bid</div>
+            <div style={{ fontFamily: '"Courier New", monospace', fontSize: 22, fontWeight: 700, color: '#1a1a1a' }}>
+              {yesBid > 0 ? `${Math.round(yesBid * 100)}¢` : '—'}
+            </div>
+          </div>
+          <div style={{
+            backgroundColor: '#faf9f6',
+            padding: '10px 12px',
+          }}>
+            <div style={{ fontFamily: '"Franklin Gothic Medium", Arial Narrow, sans-serif', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666', marginBottom: 4 }}>Yes Ask</div>
+            <div style={{ fontFamily: '"Courier New", monospace', fontSize: 22, fontWeight: 700, color: '#1a1a1a' }}>
+              {yesAsk > 0 ? `${Math.round(yesAsk * 100)}¢` : '—'}
+            </div>
+          </div>
+        </div>
+
+        {/* Open Interest + 24h Change */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 12,
+          marginBottom: 20,
+        }}>
+          <div>
+            <div style={{ fontFamily: '"Franklin Gothic Medium", Arial Narrow, sans-serif', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666', marginBottom: 4 }}>Open Interest</div>
+            <div style={{ fontFamily: '"Courier New", monospace', fontSize: 16, fontWeight: 600, color: '#1a1a1a' }}>
+              {formatNumber(openInterest)}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontFamily: '"Franklin Gothic Medium", Arial Narrow, sans-serif', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666', marginBottom: 4 }}>24h Change</div>
+            <div style={{
+              fontFamily: '"Courier New", monospace',
+              fontSize: 16,
+              fontWeight: 600,
+              color: change24h >= 0 ? '#2a7a2a' : '#8b1a1a',
+            }}>
+              {change24h >= 0 ? '+' : ''}{(change24h * 100).toFixed(1)}¢
+            </div>
+          </div>
+        </div>
+
+        {/* Larger sparkline */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontFamily: '"Franklin Gothic Medium", Arial Narrow, sans-serif', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666', marginBottom: 8 }}>Price History</div>
+          <div style={{ backgroundColor: '#faf9f6', padding: 12 }}>
+            <Sparkline data={historyData} width={300} height={80} strokeWidth={1.5} />
+          </div>
+        </div>
+
+        {/* Volume */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 12,
+          marginBottom: 24,
+        }}>
+          <div>
+            <div style={{ fontFamily: '"Franklin Gothic Medium", Arial Narrow, sans-serif', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666', marginBottom: 4 }}>Total Volume</div>
+            <div style={{ fontFamily: '"Courier New", monospace', fontSize: 16, fontWeight: 600 }}>{formatVolume(market.volume)}</div>
+          </div>
+          <div>
+            <div style={{ fontFamily: '"Franklin Gothic Medium", Arial Narrow, sans-serif', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#666', marginBottom: 4 }}>24h Volume</div>
+            <div style={{ fontFamily: '"Courier New", monospace', fontSize: 16, fontWeight: 600 }}>{formatVolume(market.volume_24h)}</div>
+          </div>
+        </div>
+
+        {/* Commentary */}
+        {market.commentary && (
+          <div style={{
+            backgroundColor: '#faf9f6',
+            padding: '10px 12px',
+            borderLeft: '3px solid #1a1a1a',
+            marginBottom: 24,
+          }}>
+            <p style={{
+              fontFamily: 'Georgia, serif',
+              fontSize: 13,
+              lineHeight: 1.4,
+              color: '#333',
+              margin: 0,
+            }}>{market.commentary}</p>
+          </div>
+        )}
+
+        {/* Trade CTA */}
+        <a
+          href={tradeUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'block',
+            width: '100%',
+            padding: '14px 0',
+            backgroundColor: '#1a1a1a',
+            color: '#faf9f6',
+            fontFamily: 'Georgia, serif',
+            fontSize: 14,
+            letterSpacing: '0.05em',
+            textAlign: 'center',
+            textDecoration: 'none',
+            transition: 'background-color 0.15s',
+          }}
+          onMouseOver={e => e.currentTarget.style.backgroundColor = '#333'}
+          onMouseOut={e => e.currentTarget.style.backgroundColor = '#1a1a1a'}
+        >
+          Trade on Kalshi →
+        </a>
+
+        <div style={{
+          fontFamily: '"Franklin Gothic Medium", Arial Narrow, sans-serif',
+          fontSize: 9,
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em',
+          color: '#999',
+          textAlign: 'center',
+          marginTop: 12,
+        }}>
+          {market.ticker}
+        </div>
+      </div>
+    </>
+  );
+};
+
 // Process markets into categories
 const processMarketsIntoCategories = (rawMarkets, configMap) => {
   const categorized = {
@@ -693,18 +1059,16 @@ const processMarketsIntoCategories = (rawMarkets, configMap) => {
     weather: [],
     other: []
   };
-  
+
   rawMarkets.forEach(m => {
-    // Find category from config based on series_ticker
     const seriesTicker = m.series_ticker || m.ticker?.split('-')[0];
     const config = configMap[seriesTicker] || {};
     const cat = config.category || m.category || 'other';
-    
-    // Convert API price (in cents) to decimal, handle both API and fallback formats
-    const yesPrice = m.yes_price !== undefined 
-      ? (m.yes_price > 1 ? m.yes_price / 100 : m.yes_price)  // Handle both cents and decimal
+
+    const yesPrice = m.yes_price !== undefined
+      ? (m.yes_price > 1 ? m.yes_price / 100 : m.yes_price)
       : (m.yes_bid || m.last_price || 50) / 100;
-    
+
     const processed = {
       ticker: m.ticker,
       title: m.title,
@@ -713,24 +1077,23 @@ const processMarketsIntoCategories = (rawMarkets, configMap) => {
       yes_price: yesPrice,
       volume: m.volume || 0,
       volume_24h: m.volume_24h || 0,
-      price_change: m.price_change !== undefined ? m.price_change : 
+      price_change: m.price_change !== undefined ? m.price_change :
         (m.previous_yes_bid ? ((m.yes_bid || m.last_price) - m.previous_yes_bid) / 100 : (Math.random() - 0.5) * 0.05),
       commentary: m.commentary || null,
       question: m.question || null,
     };
-    
+
     if (categorized[cat]) {
       categorized[cat].push(processed);
     } else {
       categorized.other.push(processed);
     }
   });
-  
-  // Sort each category by 24h volume
+
   Object.keys(categorized).forEach(cat => {
     categorized[cat].sort((a, b) => (b.volume_24h || 0) - (a.volume_24h || 0));
   });
-  
+
   return categorized;
 };
 
@@ -744,13 +1107,22 @@ const fetchKalshiMarkets = async () => {
   let allMarkets = [];
   let anySuccess = false;
 
-  // Fetch each series in parallel for speed
   const fetchPromises = MARKET_CONFIG.map(async (config) => {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-      const url = `${API_BASE}/markets?series_ticker=${config.series}&status=open&limit=30`;
+      // Use proxy on Vercel to avoid CORS, direct API locally
+      let url;
+      if (proxyBase) {
+        // Fetch series list via proxy — we need to go through our serverless fn
+        // But our proxy is per-ticker. For series listing, still use direct API
+        // (Vercel serverless functions run server-side, no CORS issue)
+        url = `${API_BASE}/markets?series_ticker=${config.series}&status=open&limit=30`;
+      } else {
+        url = `${API_BASE}/markets?series_ticker=${config.series}&status=open&limit=30`;
+      }
+
       const response = await fetch(url, {
         signal: controller.signal,
         headers: { 'Accept': 'application/json' },
@@ -780,7 +1152,6 @@ const fetchKalshiMarkets = async () => {
 
   if (anySuccess && allMarkets.length > 0) {
     console.log(`Loaded ${allMarkets.length} markets from Kalshi API`);
-    // Convert API fields to our format
     const processed = allMarkets.map(m => {
       const yesBid = parseFloat(m.yes_bid_dollars || m.yes_bid || 0);
       const yesAsk = parseFloat(m.yes_ask_dollars || m.yes_ask || 0);
@@ -822,6 +1193,27 @@ const fetchKalshiMarkets = async () => {
   };
 };
 
+// Fetch price history for displayed tickers
+const fetchHistories = async (tickers) => {
+  if (!proxyBase) return {}; // History API only available on Vercel
+  const map = {};
+  const promises = tickers.map(async (ticker) => {
+    try {
+      const res = await fetch(`${proxyBase}/history?ticker=${ticker}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.history && data.history.length > 0) {
+          map[ticker] = data.history;
+        }
+      }
+    } catch {
+      // silently ignore
+    }
+  });
+  await Promise.all(promises);
+  return map;
+};
+
 export default function KalshiNewspaper() {
   const [markets, setMarkets] = useState({
     economics: [],
@@ -835,29 +1227,34 @@ export default function KalshiNewspaper() {
   const [isLive, setIsLive] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [activeCategory, setActiveCategory] = useState('home');
-  
-  const today = new Date().toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
+  const [historyMap, setHistoryMap] = useState({});
+  const [drawerMarket, setDrawerMarket] = useState(null);
+
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
   });
 
-  // Fetch data on mount
-  useEffect(() => {
-    loadMarkets();
-  }, []);
-
-  const loadMarkets = async () => {
+  const loadMarkets = useCallback(async () => {
     setLoading(true);
     const result = await fetchKalshiMarkets();
     setMarkets(result.markets);
     setError(result.error);
     setIsLive(result.isLive);
-    // Use timestamp from JSON if available, otherwise current time
     setLastUpdated(result.timestamp ? new Date(result.timestamp) : new Date());
     setLoading(false);
-  };
+
+    // Fetch price histories for all displayed tickers
+    const allTickers = Object.values(result.markets).flat().map(m => m.ticker);
+    const histories = await fetchHistories(allTickers);
+    setHistoryMap(histories);
+  }, []);
+
+  useEffect(() => {
+    loadMarkets();
+  }, [loadMarkets]);
 
   const handleRefresh = () => {
     loadMarkets();
@@ -868,9 +1265,19 @@ export default function KalshiNewspaper() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleOpenDrawer = useCallback((market) => {
+    setDrawerMarket(market);
+    document.body.style.overflow = 'hidden';
+  }, []);
+
+  const handleCloseDrawer = useCallback(() => {
+    setDrawerMarket(null);
+    document.body.style.overflow = '';
+  }, []);
+
   const totalMarkets = Object.values(markets).flat().length;
   const currentCategory = CATEGORIES.find(c => c.id === activeCategory);
-  
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -893,7 +1300,7 @@ export default function KalshiNewspaper() {
               color: '#666',
             }}>{today}</div>
           </div>
-          <h1 
+          <h1
             onClick={() => handleCategoryClick('home')}
             style={{
               fontFamily: 'Georgia, serif',
@@ -919,10 +1326,10 @@ export default function KalshiNewspaper() {
             gap: 12,
           }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ 
-                width: 6, 
-                height: 6, 
-                borderRadius: '50%', 
+              <span style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
                 backgroundColor: isLive ? '#22c55e' : '#888',
                 display: 'inline-block'
               }}></span>
@@ -937,7 +1344,7 @@ export default function KalshiNewspaper() {
           </div>
         </div>
       </header>
-      
+
       {/* Navigation */}
       <nav style={{
         borderBottom: '1px solid #e5e5e5',
@@ -978,9 +1385,9 @@ export default function KalshiNewspaper() {
               {label}
             </button>
           ))}
-          
+
           <div style={{ width: 1, height: 20, backgroundColor: '#ddd', margin: '0 8px' }} />
-          
+
           <button
             onClick={handleRefresh}
             disabled={loading}
@@ -1011,7 +1418,7 @@ export default function KalshiNewspaper() {
           </button>
         </div>
       </nav>
-      
+
       {/* Main Content */}
       <main style={{
         maxWidth: 1000,
@@ -1031,28 +1438,32 @@ export default function KalshiNewspaper() {
               </div>
             </div>
           ) : activeCategory === 'home' ? (
-            <FrontPage markets={markets} onCategoryClick={handleCategoryClick} />
+            <FrontPage markets={markets} onCategoryClick={handleCategoryClick} historyMap={historyMap} onOpenDrawer={handleOpenDrawer} />
           ) : (
-            <CategoryPage 
-              title={currentCategory?.label || ''} 
-              markets={markets[activeCategory] || []} 
+            <CategoryPage
+              title={currentCategory?.label || ''}
+              markets={markets[activeCategory] || []}
+              historyMap={historyMap}
+              onOpenDrawer={handleOpenDrawer}
             />
           )}
         </div>
-        
+
         {/* Right Column - Sidebar */}
-        <aside style={{ 
-          borderLeft: '1px solid #e5e5e5', 
+        <aside style={{
+          borderLeft: '1px solid #e5e5e5',
           paddingLeft: 24,
         }}>
-          <SidebarContent 
-            markets={markets} 
+          <SidebarContent
+            markets={markets}
             activeCategory={activeCategory}
             onCategoryClick={handleCategoryClick}
+            historyMap={historyMap}
+            onOpenDrawer={handleOpenDrawer}
           />
         </aside>
       </main>
-      
+
       {/* Footer */}
       <footer style={{
         borderTop: '1px solid #1a1a1a',
@@ -1070,6 +1481,15 @@ export default function KalshiNewspaper() {
           Prices in cents · Volume in USD · {isLive ? 'Live data from Kalshi API' : 'Sample data · Refresh for live prices'}
         </div>
       </footer>
+
+      {/* Market Detail Drawer */}
+      {drawerMarket && (
+        <MarketDrawer
+          market={drawerMarket}
+          onClose={handleCloseDrawer}
+          historyData={historyMap[drawerMarket.ticker]}
+        />
+      )}
     </div>
   );
 }
