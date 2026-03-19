@@ -3,7 +3,7 @@
 
 const KALSHI_API = 'https://api.elections.kalshi.com/trade-api/v2';
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   const { ticker } = req.query;
 
   if (!ticker) {
@@ -28,4 +28,4 @@ export default async function handler(req, res) {
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
-}
+};

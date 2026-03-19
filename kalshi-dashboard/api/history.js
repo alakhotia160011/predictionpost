@@ -7,20 +7,18 @@
 const KALSHI_API = 'https://api.elections.kalshi.com/trade-api/v2';
 const MAX_SNAPSHOTS = 30;
 
-// --------------- In-memory fallback ---------------
 // Module-level Map persists across warm invocations on the same instance.
 // Data is lost on cold start — acceptable for now.
 const memoryStore = new Map();
 
 async function getHistory(ticker) {
-  // Try Vercel KV first
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
     try {
       const { kv } = await import('@vercel/kv');
       const data = await kv.get(`history:${ticker}`);
       return data || [];
     } catch {
-      // KV unavailable — fall through to memory
+      // fall through
     }
   }
   return memoryStore.get(ticker) || [];
@@ -39,7 +37,7 @@ async function setHistory(ticker, history) {
   memoryStore.set(ticker, history);
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   const { ticker } = req.query;
 
   if (!ticker) {
@@ -47,7 +45,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Fetch current price from Kalshi
     const response = await fetch(`${KALSHI_API}/markets/${ticker}`, {
       headers: { 'Accept': 'application/json' },
     });
@@ -59,16 +56,13 @@ export default async function handler(req, res) {
       price = parseFloat(m.last_price_dollars || m.last_price || m.yes_bid_dollars || m.yes_bid || 0);
     }
 
-    // Load existing history
     let history = await getHistory(ticker);
 
-    // Append new snapshot if we got a price and it's been at least 30s since last
     if (price !== null && price > 0) {
       const now = Date.now();
       const lastTs = history.length > 0 ? history[history.length - 1].ts : 0;
       if (now - lastTs >= 30000) {
         history.push({ ts: now, price });
-        // Trim to last MAX_SNAPSHOTS
         if (history.length > MAX_SNAPSHOTS) {
           history = history.slice(-MAX_SNAPSHOTS);
         }
@@ -82,4 +76,4 @@ export default async function handler(req, res) {
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
-}
+};

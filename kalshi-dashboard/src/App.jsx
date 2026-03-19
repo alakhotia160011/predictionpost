@@ -17,15 +17,29 @@ const MARKET_CONFIG = [
   { series: 'KXPCECORE', category: 'economics', url: 'https://kalshi.com/markets/kxpcecore' },
   { series: 'KXRECSSNBER', category: 'economics', url: 'https://kalshi.com/markets/kxrecssnber' },
   { series: 'KXINX', category: 'economics', url: 'https://kalshi.com/markets/kxinx' },
+  { series: 'KXUNRATE', category: 'economics', url: 'https://kalshi.com/markets/kxunrate' },
+  { series: 'KXSP500', category: 'economics', url: 'https://kalshi.com/markets/kxsp500' },
+  // Politics
+  { series: 'KXTRUMP', category: 'politics', url: 'https://kalshi.com/markets/kxtrump' },
+  { series: 'KXGOV', category: 'politics', url: 'https://kalshi.com/markets/kxgov' },
+  { series: 'KXTARIFF', category: 'politics', url: 'https://kalshi.com/markets/kxtariff' },
+  { series: 'KXSENATE', category: 'politics', url: 'https://kalshi.com/markets/kxsenate' },
   // Sports
   { series: 'KXNBA', category: 'sports', url: 'https://kalshi.com/markets/kxnba' },
   { series: 'KXNHL', category: 'sports', url: 'https://kalshi.com/markets/kxnhl' },
   { series: 'KXMLB', category: 'sports', url: 'https://kalshi.com/markets/kxmlb' },
+  { series: 'KXMMA', category: 'sports', url: 'https://kalshi.com/markets/kxmma' },
   // Tech/Crypto
   { series: 'KXBTC', category: 'tech', url: 'https://kalshi.com/markets/kxbtc' },
   { series: 'KXETH', category: 'tech', url: 'https://kalshi.com/markets/kxeth' },
+  { series: 'KXSOL', category: 'tech', url: 'https://kalshi.com/markets/kxsol' },
+  { series: 'KXTSLA', category: 'tech', url: 'https://kalshi.com/markets/kxtsla' },
+  { series: 'KXNVDA', category: 'tech', url: 'https://kalshi.com/markets/kxnvda' },
   // Weather
   { series: 'KXHIGHNY', category: 'weather', url: 'https://kalshi.com/markets/kxhighny' },
+  { series: 'KXHIGHCHI', category: 'weather', url: 'https://kalshi.com/markets/kxhighchi' },
+  { series: 'KXHIGHLA', category: 'weather', url: 'https://kalshi.com/markets/kxhighla' },
+  { series: 'KXHURRICANE', category: 'weather', url: 'https://kalshi.com/markets/kxhurricane' },
 ];
 
 // Fallback data — current as of March 15, 2026, from Kalshi public API
@@ -41,6 +55,12 @@ const FALLBACK_MARKETS = [
   { ticker: 'KXRECSSNBER-26', title: 'Will there be a US recession in 2026?', yes_price: 0.33, volume: 682318, volume_24h: 12400, category: 'economics', url: 'https://kalshi.com/markets/kxrecssnber', commentary: '33% recession probability — up from 25% in January. Trade war fears rising.', question: 'Are tariffs tipping the balance?' },
   { ticker: 'KXFED-27APR-T3.25', title: 'Fed funds rate above 3.25% by April 2027?', yes_price: 0.50, volume: 4352, volume_24h: 580, category: 'economics', url: 'https://kalshi.com/markets/kxfed', commentary: 'Wide bid-ask spreads on far-dated Fed markets. 50/50 on rate above 3.25%.', question: 'How many cuts this cycle?' },
   { ticker: 'KXFED-27APR-T3.50', title: 'Fed funds rate above 3.50% by April 2027?', yes_price: 0.50, volume: 1733, volume_24h: 320, category: 'economics', url: 'https://kalshi.com/markets/kxfed', commentary: 'Markets still uncertain on terminal rate.', question: 'Higher for even longer?' },
+
+  // ==================== POLITICS ====================
+  { ticker: 'KXTRUMP-26-APPROVE', title: 'Trump approval rating above 45% in March?', yes_price: 0.42, volume: 512000, volume_24h: 45000, category: 'politics', url: 'https://kalshi.com/markets/kxtrump', commentary: 'Approval hovering near 43%. Tariff backlash weighing on numbers.', question: 'Can tariffs boost his base?' },
+  { ticker: 'KXTARIFF-26-CHINA', title: 'US-China tariffs above 50% by June 2026?', yes_price: 0.68, volume: 328000, volume_24h: 38000, category: 'politics', url: 'https://kalshi.com/markets/kxtariff', commentary: '68% probability of escalation. Trade talks stalled since February.', question: 'Is a trade deal dead?' },
+  { ticker: 'KXGOV-26-SHUTDOWN', title: 'Government shutdown before July 2026?', yes_price: 0.35, volume: 215000, volume_24h: 18000, category: 'politics', url: 'https://kalshi.com/markets/kxgov', commentary: 'Spending bill deadlock in Congress. Continuing resolutions running out.', question: 'Shutdown showdown?' },
+  { ticker: 'KXSENATE-26-FLIP', title: 'Democrats retake Senate in 2026 midterms?', yes_price: 0.28, volume: 890000, volume_24h: 52000, category: 'politics', url: 'https://kalshi.com/markets/kxsenate', commentary: 'Tough map for Democrats but economic discontent could shift races.', question: 'Blue wave or red wall?' },
 
   // ==================== SPORTS ====================
   { ticker: 'KXNBA-26-OKC', title: 'Thunder win 2026 NBA Finals?', yes_price: 0.38, volume: 2947010, volume_24h: 185000, category: 'sports', url: 'https://kalshi.com/markets/kxnba', commentary: 'Clear favorite at 38%. SGA leading MVP race. Dominant regular season.', question: 'Can anyone stop OKC?' },
@@ -58,16 +78,23 @@ const FALLBACK_MARKETS = [
   { ticker: 'KXBTC-26MAR1617-B73000', title: 'Bitcoin above $73,000 on March 16?', yes_price: 0.13, volume: 3456, volume_24h: 890, category: 'tech', url: 'https://kalshi.com/markets/kxbtc', commentary: 'Daily price bracket. BTC trading around $73K. Tight range.', question: 'Breakout or breakdown?' },
   { ticker: 'KXBTC-26MAR1617-T62250', title: 'Bitcoin below $62,250 on March 16?', yes_price: 0.01, volume: 836, volume_24h: 210, category: 'tech', url: 'https://kalshi.com/markets/kxbtc', commentary: 'Deep out-of-the-money. Would require a major crash.', question: 'Black swan hedge?' },
   { ticker: 'KXETH-26MAR1617-T2860', title: 'Ethereum price range on March 16?', yes_price: 0.01, volume: 55, volume_24h: 12, category: 'tech', url: 'https://kalshi.com/markets/kxeth', commentary: 'ETH markets very thin. Low interest in daily brackets.', question: 'Where did the ETH traders go?' },
+  { ticker: 'KXTSLA-26MAR-B250', title: 'Tesla stock above $250 end of March?', yes_price: 0.45, volume: 125000, volume_24h: 18000, category: 'tech', url: 'https://kalshi.com/markets/kxtsla', commentary: 'TSLA volatile after earnings guidance. Robotaxi timeline in focus.', question: 'Musk premium or Musk discount?' },
+  { ticker: 'KXNVDA-26MAR-B900', title: 'NVIDIA stock above $900 end of March?', yes_price: 0.62, volume: 98000, volume_24h: 14000, category: 'tech', url: 'https://kalshi.com/markets/kxnvda', commentary: 'AI chip demand still surging. Blackwell orders backlogged through 2026.', question: 'Is the AI trade crowded?' },
+  { ticker: 'KXSOL-26MAR-B180', title: 'Solana above $180 on March 18?', yes_price: 0.38, volume: 42000, volume_24h: 8500, category: 'tech', url: 'https://kalshi.com/markets/kxsol', commentary: 'SOL recovering from February dip. DeFi activity picking up.', question: 'Alt season incoming?' },
 
   // ==================== WEATHER ====================
   { ticker: 'KXHIGHNY-26MAR15-T47', title: 'NYC high temperature below 47°F on March 15?', yes_price: 0.01, volume: 84790, volume_24h: 42000, category: 'weather', url: 'https://kalshi.com/markets/kxhighny', commentary: 'Resolved near 1c. Surprisingly high volume for weather.', question: 'Who\'s trading the weather?' },
   { ticker: 'KXHIGHNY-26MAR15-B51.5', title: 'NYC high 51-52°F on March 15?', yes_price: 0.12, volume: 25894, volume_24h: 12000, category: 'weather', url: 'https://kalshi.com/markets/kxhighny', commentary: 'Mid-range temperature bracket for today.', question: 'Spring arriving early?' },
   { ticker: 'KXHIGHNY-26MAR15-T54', title: 'NYC high above 54°F on March 15?', yes_price: 0.01, volume: 11662, volume_24h: 5800, category: 'weather', url: 'https://kalshi.com/markets/kxhighny', commentary: 'Unlikely to get that warm today.', question: 'Coat or no coat?' },
+  { ticker: 'KXHIGHCHI-26MAR18-B42', title: 'Chicago high above 42°F on March 18?', yes_price: 0.72, volume: 35000, volume_24h: 15000, category: 'weather', url: 'https://kalshi.com/markets/kxhighchi', commentary: 'Midwest warming trend this week. Spring thaw underway.', question: 'Winter finally over?' },
+  { ticker: 'KXHIGHLA-26MAR18-B78', title: 'LA high above 78°F on March 18?', yes_price: 0.25, volume: 18000, volume_24h: 7500, category: 'weather', url: 'https://kalshi.com/markets/kxhighla', commentary: 'Santa Ana winds could push temps higher. Fire risk elevated.', question: 'Heat wave in March?' },
+  { ticker: 'KXHURRICANE-26-T15', title: 'More than 15 named storms in 2026 season?', yes_price: 0.55, volume: 245000, volume_24h: 9200, category: 'weather', url: 'https://kalshi.com/markets/kxhurricane', commentary: 'La Niña fading but ocean temps remain elevated. NOAA outlook due May.', question: 'Another hyperactive season?' },
 ];
 
 const CATEGORIES = [
   { id: 'home', label: 'Front Page' },
   { id: 'economics', label: 'Economics' },
+  { id: 'politics', label: 'Politics' },
   { id: 'sports', label: 'Sports' },
   { id: 'tech', label: 'Tech' },
   { id: 'weather', label: 'Weather' },
@@ -553,11 +580,11 @@ const CategoryPage = ({ title, markets, historyMap, onOpenDrawer }) => {
 const FrontPage = ({ markets, onCategoryClick, historyMap, onOpenDrawer }) => {
   const topByVolume = Object.values(markets).flat()
     .sort((a, b) => (b.volume_24h || 0) - (a.volume_24h || 0))
-    .slice(0, 3);
+    .slice(0, 5);
 
   return (
     <div>
-      {/* Hero: Top 3 markets */}
+      {/* Hero: Top 5 markets */}
       <div style={{ marginBottom: 28 }}>
         <h3 style={{
           fontFamily: '"Franklin Gothic Medium", Arial Narrow, sans-serif',
@@ -576,7 +603,7 @@ const FrontPage = ({ markets, onCategoryClick, historyMap, onOpenDrawer }) => {
         ))}
       </div>
 
-      {/* Category previews */}
+      {/* Category previews — all major sections */}
       <CategoryPreview
         title="Economics"
         markets={markets.economics || []}
@@ -585,9 +612,23 @@ const FrontPage = ({ markets, onCategoryClick, historyMap, onOpenDrawer }) => {
         onOpenDrawer={onOpenDrawer}
       />
       <CategoryPreview
+        title="Politics"
+        markets={markets.politics || []}
+        onViewAll={() => onCategoryClick('politics')}
+        historyMap={historyMap}
+        onOpenDrawer={onOpenDrawer}
+      />
+      <CategoryPreview
         title="Sports"
         markets={markets.sports || []}
         onViewAll={() => onCategoryClick('sports')}
+        historyMap={historyMap}
+        onOpenDrawer={onOpenDrawer}
+      />
+      <CategoryPreview
+        title="Tech"
+        markets={markets.tech || []}
+        onViewAll={() => onCategoryClick('tech')}
         historyMap={historyMap}
         onOpenDrawer={onOpenDrawer}
       />
@@ -656,16 +697,9 @@ const SidebarContent = ({ markets, activeCategory, onCategoryClick, historyMap, 
         </div>
       )}
 
-      {/* Tech & Weather previews on front page */}
+      {/* Weather preview on front page sidebar */}
       {activeCategory === 'home' && (
         <>
-          <CategoryPreview
-            title="Tech"
-            markets={markets.tech || []}
-            onViewAll={() => onCategoryClick('tech')}
-            historyMap={historyMap}
-            onOpenDrawer={onOpenDrawer}
-          />
           <CategoryPreview
             title="Weather"
             markets={markets.weather || []}
@@ -1055,6 +1089,7 @@ const MarketDrawer = ({ market, onClose, historyData }) => {
 const processMarketsIntoCategories = (rawMarkets, configMap) => {
   const categorized = {
     economics: [],
+    politics: [],
     sports: [],
     tech: [],
     weather: [],
