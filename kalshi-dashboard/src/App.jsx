@@ -135,8 +135,9 @@ const Sparkline = ({ data, width = 100, height = 28, strokeWidth = 1 }) => {
 // ─────────────────────────────────────────────────
 // FEATURE 1: Trade Link button
 // ─────────────────────────────────────────────────
-const TradeLink = ({ ticker }) => {
-  const url = `https://kalshi.com/markets/${ticker.toLowerCase()}`;
+const TradeLink = ({ ticker, seriesUrl }) => {
+  // Kalshi web URLs use the series ticker (e.g. kxnba), not the full market ticker
+  const url = seriesUrl || `https://kalshi.com/markets/${ticker.split('-')[0].toLowerCase()}`;
   return (
     <a
       href={url}
@@ -319,7 +320,7 @@ const MarketCard = ({ market, featured, showCategory, historyData, onOpenDrawer 
               margin: 0,
             }}>{market.question}</p>
           ) : <span />}
-          <TradeLink ticker={market.ticker} />
+          <TradeLink ticker={market.ticker} seriesUrl={market.url} />
         </div>
       </div>
     );
@@ -388,7 +389,7 @@ const MarketCard = ({ market, featured, showCategory, historyData, onOpenDrawer 
           }}>{market.commentary}</p>
         ) : <span />}
         <div style={{ marginLeft: 8, flexShrink: 0 }}>
-          <TradeLink ticker={market.ticker} />
+          <TradeLink ticker={market.ticker} seriesUrl={market.url} />
         </div>
       </div>
     </div>
@@ -847,7 +848,7 @@ const MarketDrawer = ({ market, onClose, historyData }) => {
   const prevPrice = parseFloat(d.previous_price_dollars || d.previous_price || 0);
   const change24h = prevPrice > 0 ? lastPrice - prevPrice : market.price_change || 0;
   const openInterest = d.open_interest_fp || d.open_interest || 0;
-  const tradeUrl = `https://kalshi.com/markets/${market.ticker.toLowerCase()}`;
+  const tradeUrl = market.url || `https://kalshi.com/markets/${market.ticker.split('-')[0].toLowerCase()}`;
 
   return (
     <>
