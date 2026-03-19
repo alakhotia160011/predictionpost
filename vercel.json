@@ -1,5 +1,8 @@
 {
   "buildCommand": "cd kalshi-dashboard && npm install && npm run build",
   "outputDirectory": "kalshi-dashboard/dist",
-  "framework": "vite"
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
 }
